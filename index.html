@@ -518,13 +518,27 @@ select option { background: var(--surface2); color: var(--label); }
 .stats-row {
   display: flex; gap: 12px; padding: 12px 20px;
   border-bottom: 1px solid var(--separator);
-  background: rgba(10,10,12,0.5); overflow-x: auto; flex-shrink: 0;
+  background: var(--topbar-bg); overflow-x: auto; flex-shrink: 0;
 }
 .stat-item {
   flex-shrink: 0; padding: 10px 16px;
-  background: rgba(30,30,35,0.8); border: 1px solid rgba(255,255,255,0.06);
+  background: var(--surface); border: 1px solid var(--card-border);
   border-radius: var(--radius); min-width: 100px; text-align: center;
   backdrop-filter: blur(20px);
+}
+
+/* ── ANALYTICS CARDS (theme-aware) ── */
+.analytics-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+.analytics-grid .analytics-card { margin-bottom: 0; padding: 20px; }
+.progress-track {
+  height: 10px; background: var(--fill); border-radius: 99px; overflow: hidden;
 }
 .stat-value { font-size: 22px; font-weight: 700; font-family: var(--font-mono); letter-spacing: -1px; line-height: 1.1; }
 .stat-label { font-size: 11px; color: var(--label3); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.3px; }
@@ -1002,9 +1016,9 @@ create trigger on_auth_user_created
       </div>
     </div>
     <div id="auth-register" class="hidden">
-      <div class="field"><label>Nome Completo</label><input type="text" id="r-name" placeholder="Ana Beatriz Silva"></div>
-      <div class="field"><label>E-mail Corporativo</label><input type="email" id="r-email" placeholder="email@empresa.com.br"></div>
-      <div class="field"><label>Criar Senha</label><input type="password" id="r-pass" placeholder="mínimo 6 caracteres"></div>
+      <div class="field"><label>Nome Completo</label><input type="text" id="r-name" placeholder="Ana Beatriz Silva" onkeydown="if(event.key==='Enter')doRegister()"></div>
+      <div class="field"><label>E-mail Corporativo</label><input type="email" id="r-email" placeholder="email@empresa.com.br" onkeydown="if(event.key==='Enter')doRegister()"></div>
+      <div class="field"><label>Criar Senha</label><input type="password" id="r-pass" placeholder="mínimo 6 caracteres" onkeydown="if(event.key==='Enter')doRegister()"></div>
       <div class="field">
         <label>Cargo / Perfil</label>
         <select id="r-role">
@@ -1291,7 +1305,7 @@ create trigger on_auth_user_created
         <div id="comments-list"></div>
         <div class="comment-compose">
           <div class="avatar av-sm" id="compose-avatar" style="background:#007AFF;flex-shrink:0">?</div>
-          <textarea id="comment-input" placeholder="Adicionar comentário…" rows="2" style="flex:1;padding:8px 11px;font-size:13px;border-radius:var(--radius-sm);border:1px solid var(--separator);font-family:var(--font);outline:none;resize:none;"></textarea>
+          <textarea id="comment-input" placeholder="Adicionar comentário… (Ctrl+Enter para enviar)" rows="2" style="flex:1;padding:8px 11px;font-size:13px;border-radius:var(--radius-sm);border:1px solid var(--separator);font-family:var(--font);outline:none;resize:none;background:var(--input-bg);color:var(--label)" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();addComment();}"></textarea>
           <button class="btn btn-primary btn-sm" onclick="addComment()" style="flex-shrink:0">Enviar</button>
         </div>
       </div>
@@ -1331,8 +1345,8 @@ create trigger on_auth_user_created
 const CFG_KEY = 'atrium_cfg';
 // ⚠️ ADMIN: Fill in your Supabase credentials below so users never see the setup screen.
 const ATRIUM_DEFAULTS = {
-  supabaseUrl: '',  // ex: 'https://xyzxyz.supabase.co'
-  supabaseKey: '',  // ex: 'eyJhbGci...'
+  supabaseUrl: 'https://twvnbqvpknacobmkedth.supabase.co',  // ex: 'https://xyzxyz.supabase.co'
+  supabaseKey: 'sb_publishable_LqjRWoqlEGHidfjRr-lupA_Q6Ffo9ie',  // ex: 'eyJhbGci...'
 };
 let cfg = { supabaseUrl: '', supabaseKey: '', anthropicKey: '', theme: 'dark' };
 let db = null;
@@ -1632,13 +1646,13 @@ function populateFilters() {
   const fu = document.getElementById('filter-user');
   if (fu) {
     const cur = fu.value;
-    fu.innerHTML = '<option value="">Todos os membros</option>' + S.profiles.map(p => `<option value="${p.id}">${p.name.split(' ')[0]}</option>`).join('');
+    fu.innerHTML = '<option value="">Todos os membros</option>' + S.profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name.split(' ')[0])}</option>`).join('');
     fu.value = cur;
   }
   const fa = document.getElementById('f-assignee');
   if (fa) {
     const cur = fa.value;
-    fa.innerHTML = '<option value="">Sem responsável</option>' + S.profiles.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    fa.innerHTML = '<option value="">Sem responsável</option>' + S.profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
     if (cur) fa.value = cur;
   }
 }
@@ -1721,7 +1735,7 @@ function renderCardHtml(c) {
       </div>
       ${c.description ? `<div class="card-desc">${esc(c.description)}</div>` : ''}
       <div class="card-footer">
-        ${a ? `<div class="card-assignee"><div class="avatar av-sm" style="background:${a.color||'#007AFF'};box-shadow:0 0 8px rgba(0,0,0,0.5)">${initials(a.name)}</div><span class="truncate" style="font-weight:600">${a.name.split(' ')[0]}</span><select class="quick-assign-select" onchange="quickAssign('${c.id}', this.value)" onclick="event.stopPropagation()"><option value="">Retirar...</option>${S.profiles.map(p=>`<option value="${p.id}" ${p.id===a.id?'selected':''}>${p.name}</option>`).join('')}</select></div>` : `<div class="card-assignee"><div class="avatar av-sm" style="background:var(--fill)">👤</div><span class="truncate" style="opacity:0.6">Atribuir...</span><select class="quick-assign-select" onchange="quickAssign('${c.id}', this.value)" onclick="event.stopPropagation()"><option value="">Escolher...</option>${S.profiles.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`}
+        ${a ? `<div class="card-assignee"><div class="avatar av-sm" style="background:${safeColor(a.color)};box-shadow:0 0 8px rgba(0,0,0,0.5)">${esc(initials(a.name))}</div><span class="truncate" style="font-weight:600">${esc(a.name.split(' ')[0])}</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Retirar…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}" ${p.id===a.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>` : `<div class="card-assignee"><div class="avatar av-sm" style="background:var(--fill)">👤</div><span class="truncate" style="opacity:0.6">Atribuir…</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Escolher…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>`}
         ${c.deadline ? `<div class="card-date ${dateClass}">${overdue?'⚠':soon?'🕐':'📅'}${fmtDate(c.deadline)}</div>` : ''}
       </div>
     </div>
@@ -1762,7 +1776,10 @@ function openCardDrawer(cardId, defaultStatus) {
   document.getElementById('f-desc').value = card?.description || '';
   document.getElementById('f-status').value = card?.status || defaultStatus || 'todo';
   document.getElementById('f-urgency').value = card?.urgency || 'media';
-  document.getElementById('f-deadline').value = card?.deadline || '';
+  const dlEl = document.getElementById('f-deadline');
+  dlEl.value = card?.deadline || '';
+  // Permite datas passadas em edição (pra não "invalidar" data já salva), bloqueia em criação
+  if (!card) dlEl.min = todayStr(); else dlEl.removeAttribute('min');
 
   // Populate assignee dropdown
   populateFilters();
@@ -1787,6 +1804,8 @@ function openCardDrawer(cardId, defaultStatus) {
   }
 
   openDrawer('card-overlay');
+  // Foco automático no título ao criar nova demanda (melhor UX)
+  if (!card) setTimeout(() => document.getElementById('f-title')?.focus(), 280);
 }
 
 async function saveCard() {
@@ -1836,7 +1855,7 @@ async function quickAssign(cardId, assigneeId) {
   if (assigneeId === undefined) return;
   const { error } = await db.from('cards').update({ assignee_id: assigneeId || null, updated_at: new Date().toISOString() }).eq('id', cardId);
   if (error) { showNotif('❌ Erro ao atribuir: ' + error.message); return; }
-  showNotif('✅ Demanda movida!');
+  showNotif(assigneeId ? '✅ Responsável atualizado!' : '✅ Responsável removido.');
   await loadCards();
   renderBoard();
 }
@@ -1862,7 +1881,7 @@ function renderComments() {
   list.innerHTML = S.cardComments.map(cm => {
     const a = cm.author;
     return `<div class="comment">
-      <div class="avatar av-sm" style="background:${a?.color||'#007AFF'};flex-shrink:0">${initials(a?.name||'?')}</div>
+      <div class="avatar av-sm" style="background:${safeColor(a?.color)};flex-shrink:0">${esc(initials(a?.name||'?'))}</div>
       <div class="comment-content">
         <div class="comment-bubble">
           <div class="comment-author">${esc(a?.name||'–')}</div>
@@ -1900,7 +1919,7 @@ function renderTeam() {
     const done   = S.cards.filter(c => c.assignee_id === p.id && c.status === 'done').length;
     const isMe   = S.me?.id === p.id;
     return `<div class="team-card" style="${isMe?'border-color:var(--accent);background:rgba(10,132,255,0.06)':''}">
-      <div class="avatar av-lg" style="background:${p.color||'#007AFF'};box-shadow:0 6px 18px rgba(0,0,0,0.4);flex-shrink:0">${initials(p.name)}</div>
+      <div class="avatar av-lg" style="background:${safeColor(p.color)};box-shadow:0 6px 18px rgba(0,0,0,0.4);flex-shrink:0">${esc(initials(p.name))}</div>
       <div class="team-info" style="flex:1;min-width:0">
         <div class="team-name" style="display:flex;align-items:center;gap:8px;${isMe?'color:var(--accent);font-weight:700;':'font-weight:600'}">
           ${esc(p.name)}
@@ -1911,73 +1930,6 @@ function renderTeam() {
       <div class="role-chip r-${p.role}">${ROLE_LABELS[p.role]||p.role}</div>
     </div>`;
   }).join('') || '<div style="color:var(--label3);text-align:center;padding:60px;font-size:14px;">Nenhum membro.<br><small style="opacity:0.5">Verifique o banco de dados.</small></div>';
-}
-
-/* ═══════════════════════════════════════════════════════
-   ANALYTICS
-═══════════════════════════════════════════════════════ */
-function renderAnalytics() {
-  const total    = S.cards.length;
-  const done     = S.cards.filter(c => c.status === 'done').length;
-  const doing    = S.cards.filter(c => c.status === 'doing').length;
-  const todo     = S.cards.filter(c => c.status === 'todo').length;
-  const critica  = S.cards.filter(c => c.urgency === 'critica' && c.status !== 'done').length;
-  const overdue  = S.cards.filter(c => c.deadline && c.deadline < todayStr() && c.status !== 'done').length;
-  const pct      = total ? Math.round(done / total * 100) : 0;
-
-  const card = (icon, val, label, color='var(--label)') =>
-    `<div style="background:linear-gradient(145deg,rgba(30,30,35,0.9),rgba(18,18,22,0.97));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:20px 22px;">
-       <div style="font-size:22px;margin-bottom:8px">${icon}</div>
-       <div style="font-size:34px;font-weight:800;font-family:var(--font-display);color:${color};line-height:1;letter-spacing:-1px">${val}</div>
-       <div style="font-size:11px;color:var(--label3);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-top:6px">${label}</div>
-     </div>`;
-
-  const memberStats = S.profiles.map(p => {
-    const asgn  = S.cards.filter(c => c.assignee_id === p.id);
-    const doneP = asgn.filter(c => c.status === 'done').length;
-    const actP  = asgn.filter(c => c.status !== 'done').length;
-    return { ...p, total: asgn.length, done: doneP, active: actP };
-  }).sort((a,b) => b.active - a.active);
-
-  document.getElementById('analytics-content').innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">
-      ${card('📊', total, 'Total')}
-      ${card('✅', done, 'Concluídas', 'var(--success)')}
-      ${card('⏳', doing, 'Em Andamento', 'var(--accent)')}
-      ${card('📋', todo, 'À Fazer')}
-      ${card('🚨', critica, 'Críticas', critica>0?'var(--danger)':'var(--label3)')}
-      ${card('⚠️', overdue, 'Atrasadas', overdue>0?'var(--warning)':'var(--label3)')}
-    </div>
-
-    <div style="background:linear-gradient(145deg,rgba(30,30,35,0.9),rgba(18,18,22,0.97));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:24px;margin-bottom:20px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="font-size:16px;font-weight:700;font-family:var(--font-display)">Progresso Global</div>
-        <div style="font-size:30px;font-weight:800;color:var(--accent);font-family:var(--font-display)">${pct}%</div>
-      </div>
-      <div style="height:10px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden">
-        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),#6e40c9);border-radius:99px;transition:width 0.8s cubic-bezier(0.16,1,0.3,1)"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:11px;color:var(--label3)">
-        <span>${done} concluídas</span><span>${total - done} pendentes</span>
-      </div>
-    </div>
-
-    <div style="background:linear-gradient(145deg,rgba(30,30,35,0.9),rgba(18,18,22,0.97));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:24px">
-      <div style="font-size:16px;font-weight:700;font-family:var(--font-display);margin-bottom:20px">Carga por Membro</div>
-      ${memberStats.map(m => `
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-          <div style="width:38px;height:38px;border-radius:50%;background:${m.color||'#007AFF'};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;box-shadow:0 4px 10px rgba(0,0,0,0.3)">${initials(m.name)}</div>
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <span style="font-size:13px;font-weight:600">${esc(m.name)}</span>
-              <span style="font-size:12px;color:var(--label3)">${m.active} ativa${m.active!==1?'s':''} / ${m.total} total</span>
-            </div>
-            <div style="height:5px;background:rgba(255,255,255,0.06);border-radius:99px">
-              <div style="height:100%;width:${m.total?Math.round(m.done/m.total*100):0}%;background:${m.color||'#007AFF'};border-radius:99px;opacity:0.85"></div>
-            </div>
-          </div>
-        </div>`).join('')}
-    </div>`;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2000,7 +1952,12 @@ async function saveMember() {
   if (!name || !email || !pass) { showNotif('⚠️ Preencha todos os campos.'); return; }
   if (pass.length < 6) { showNotif('⚠️ Senha deve ter ao menos 6 caracteres.'); return; }
   setBtnLoading('save-member-btn', true);
+  // Supabase signUp substitui a sessão ativa — salvamos tokens do admin e restauramos depois
+  const adminTokens = S.session ? { access_token: S.session.access_token, refresh_token: S.session.refresh_token } : null;
   const { error } = await db.auth.signUp({ email, password: pass, options: { data: { name, role } } });
+  if (adminTokens) {
+    try { await db.auth.setSession(adminTokens); } catch(e) { console.error('Falha ao restaurar sessão admin', e); }
+  }
   setBtnLoading('save-member-btn', false);
   if (error) { showNotif('❌ Erro: ' + error.message); return; }
   showNotif('✅ Convite enviado para ' + email);
@@ -2051,45 +2008,64 @@ async function callAI(prompt) {
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type':'application/json', 'x-api-key': key, 'anthropic-version':'2023-06-01' },
-      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:600, messages:[{ role:'user', content: prompt }] })
+      headers: {
+        'Content-Type':'application/json',
+        'x-api-key': key,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({ model:'claude-sonnet-4-5', max_tokens:600, messages:[{ role:'user', content: prompt }] })
     });
     const d = await r.json();
-    if (d.error) throw new Error(d.error.message);
-    return d.content[0].text;
+    if (!r.ok || d.error) throw new Error(d.error?.message || `HTTP ${r.status}`);
+    const text = d.content?.[0]?.text;
+    if (!text) throw new Error('Resposta vazia da IA');
+    return text;
   } catch(e) {
     res.innerHTML = `<span style="color:var(--danger)">Erro: ${esc(e.message)}</span>`;
     return null;
   }
 }
 
+function renderAiText(text) {
+  return esc(text).replace(/\n/g,'<br>');
+}
+
 async function aiSuggestUrgency() {
   const ans = await callAI(`Você é assistente de uma imobiliária brasileira. Analise esta demanda e sugira o nível de urgência (Baixa/Média/Alta/Crítica). Justifique em 2 frases. Formato: "URGÊNCIA: [nível]\n[justificativa]"\n\n${cardContext()}`);
   if (!ans) return;
   const res = document.getElementById('ai-result');
-  res.innerHTML = ans.replace(/\n/g,'<br>');
+  res.innerHTML = renderAiText(ans);
   const m = ans.match(/URGÊNCIA:\s*(Baixa|Média|Alta|Crítica)/i);
   if (m) {
     const map = {'baixa':'baixa','média':'media','alta':'alta','crítica':'critica'};
     const val = map[m[1].toLowerCase()];
-    if (val) res.innerHTML += `<br><button class="ai-apply-chip" onclick="document.getElementById('f-urgency').value='${val}';showNotif('✅ Urgência aplicada!')">✅ Aplicar ${m[1]}</button>`;
+    if (val) {
+      const btn = document.createElement('button');
+      btn.className = 'ai-apply-chip';
+      btn.style.marginTop = '8px';
+      btn.textContent = `✅ Aplicar ${m[1]}`;
+      btn.onclick = () => { document.getElementById('f-urgency').value = val; showNotif('✅ Urgência aplicada!'); };
+      res.appendChild(document.createElement('br'));
+      res.appendChild(btn);
+    }
   }
 }
 
 async function aiSuggestAssignee() {
   const ans = await callAI(`Você é assistente de uma imobiliária. Com base na demanda e na carga de trabalho atual, sugira qual membro da equipe deve ser responsável por esta tarefa. Justifique brevemente em português.\n\n${cardContext()}`);
-  if (ans) { const res = document.getElementById('ai-result'); res.innerHTML = ans.replace(/\n/g,'<br>'); }
+  if (ans) document.getElementById('ai-result').innerHTML = renderAiText(ans);
 }
 
 async function aiSummarize() {
   const comments = S.cardComments.map(c=>`${c.author?.name}: ${c.body}`).join('\n');
   const ans = await callAI(`Gere um resumo executivo conciso (3-4 frases) desta demanda imobiliária em português. Destaque pontos de atenção.\n\n${cardContext()}\nComentários:\n${comments||'(nenhum)'}`);
-  if (ans) { const res = document.getElementById('ai-result'); res.innerHTML = ans.replace(/\n/g,'<br>'); }
+  if (ans) document.getElementById('ai-result').innerHTML = renderAiText(ans);
 }
 
 async function aiRisk() {
   const ans = await callAI(`Analise os riscos e possíveis gargalos desta demanda imobiliária. Liste em tópicos curtos em português. Seja objetivo e direto.\n\n${cardContext()}`);
-  if (ans) { const res = document.getElementById('ai-result'); res.innerHTML = ans.replace(/\n/g,'<br>'); }
+  if (ans) document.getElementById('ai-result').innerHTML = renderAiText(ans);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2108,7 +2084,16 @@ function onOverlayClick(e, id) {
 /* ═══════════════════════════════════════════════════════
    UTILITIES
 ═══════════════════════════════════════════════════════ */
-function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) {
+  return (s==null?'':String(s))
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+// Valida cor hex para uso seguro em atributos style (evita CSS injection)
+function safeColor(c) {
+  if (typeof c !== 'string') return '#007AFF';
+  return /^#[0-9a-f]{3,8}$/i.test(c.trim()) ? c.trim() : '#007AFF';
+}
 function initials(name) { return (name||'').split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase() || '?'; }
 function todayStr() { return new Date().toISOString().slice(0,10); }
 function fmtDate(d) { return d ? new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'short'}) : ''; }
@@ -2126,8 +2111,16 @@ function showNotif(text) {
 function setBtnLoading(id, loading) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.classList.toggle('btn-loading', loading);
-  el.textContent = loading ? 'Aguarde…' : (id === 'login-btn' ? 'Entrar' : id === 'register-btn' ? 'Criar conta' : id === 'save-card-btn' ? 'Salvar demanda' : id === 'save-member-btn' ? 'Convidar' : 'Salvar');
+  if (loading) {
+    if (!el.dataset.originalText) el.dataset.originalText = el.textContent;
+    el.classList.add('btn-loading');
+    el.setAttribute('aria-busy', 'true');
+    el.textContent = 'Aguarde…';
+  } else {
+    el.classList.remove('btn-loading');
+    el.removeAttribute('aria-busy');
+    if (el.dataset.originalText) { el.textContent = el.dataset.originalText; delete el.dataset.originalText; }
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2285,13 +2278,20 @@ async function saveProfileColor(color) {
 let analyticsFilter = 'all';
 
 function renderAnalytics() {
-  const total   = S.cards.length;
-  const done    = S.cards.filter(c => c.status === 'done').length;
-  const doing   = S.cards.filter(c => c.status === 'doing').length;
-  const review  = S.cards.filter(c => c.status === 'review').length;
-  const todo    = S.cards.filter(c => c.status === 'todo').length;
-  const critica = S.cards.filter(c => c.urgency === 'critica' && c.status !== 'done').length;
-  const overdue = S.cards.filter(c => c.deadline && c.deadline < todayStr() && c.status !== 'done').length;
+  // Aplica filtro por período sobre created_at
+  let scope = S.cards;
+  if (analyticsFilter !== 'all') {
+    const days = parseInt(analyticsFilter, 10);
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
+    scope = S.cards.filter(c => c.created_at && new Date(c.created_at) >= cutoff);
+  }
+  const total   = scope.length;
+  const done    = scope.filter(c => c.status === 'done').length;
+  const doing   = scope.filter(c => c.status === 'doing').length;
+  const review  = scope.filter(c => c.status === 'review').length;
+  const todo    = scope.filter(c => c.status === 'todo').length;
+  const critica = scope.filter(c => c.urgency === 'critica' && c.status !== 'done').length;
+  const overdue = scope.filter(c => c.deadline && c.deadline < todayStr() && c.status !== 'done').length;
   const pct     = total ? Math.round(done / total * 100) : 0;
 
   // SVG bar chart
@@ -2312,28 +2312,28 @@ function renderAnalytics() {
       <g>
         <rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="${d.color}" rx="${barRadius}" opacity="0.9"/>
         <rect x="${x}" y="${y}" width="${barW}" height="${Math.min(h, 12)}" fill="${d.color}" rx="${barRadius}"/>
-        <text x="${x + barW/2}" y="${chartH + 18}" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.45)" font-family="Inter,sans-serif">${d.label}</text>
+        <text x="${x + barW/2}" y="${chartH + 18}" text-anchor="middle" font-size="11" fill="currentColor" style="color:var(--label2)" font-family="Inter,sans-serif">${d.label}</text>
         <text x="${x + barW/2}" y="${y - 6}" text-anchor="middle" font-size="13" font-weight="700" fill="${d.color}" font-family="Outfit,sans-serif">${d.val}</text>
       </g>`;
   }).join('');
 
-  // Urgency donut (simple arcs)
+  // Urgency donut (simple arcs) — usa o mesmo scope filtrado
   const urgBars = [
-    { label: '🟢 Baixa',  val: S.cards.filter(c=>c.urgency==='baixa').length,   color: '#30D158' },
-    { label: '🟡 Média',  val: S.cards.filter(c=>c.urgency==='media').length,   color: '#FF9F0A' },
-    { label: '🟠 Alta',   val: S.cards.filter(c=>c.urgency==='alta').length,    color: '#FF6B00' },
-    { label: '🔴 Crítica',val: S.cards.filter(c=>c.urgency==='critica').length, color: '#FF453A' },
+    { label: '🟢 Baixa',  val: scope.filter(c=>c.urgency==='baixa').length,   color: '#30D158' },
+    { label: '🟡 Média',  val: scope.filter(c=>c.urgency==='media').length,   color: '#FF9F0A' },
+    { label: '🟠 Alta',   val: scope.filter(c=>c.urgency==='alta').length,    color: '#FF6B00' },
+    { label: '🔴 Crítica',val: scope.filter(c=>c.urgency==='critica').length, color: '#FF453A' },
   ];
 
   const memberStats = S.profiles.map(p => {
-    const asgn  = S.cards.filter(c => c.assignee_id === p.id);
+    const asgn  = scope.filter(c => c.assignee_id === p.id);
     const doneP = asgn.filter(c => c.status === 'done').length;
     const actP  = asgn.filter(c => c.status !== 'done').length;
     return { ...p, total: asgn.length, done: doneP, active: actP };
   }).sort((a,b) => b.active - a.active);
 
   const kpi = (icon, val, label, color='var(--label)', sub='') =>
-    `<div style="background:linear-gradient(145deg,rgba(28,28,34,0.95),rgba(16,16,22,0.98));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:20px;position:relative;overflow:hidden">
+    `<div class="analytics-card" style="position:relative;overflow:hidden">
        <div style="position:absolute;top:12px;right:14px;font-size:28px;opacity:0.12">${icon}</div>
        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--label3);font-weight:700;margin-bottom:8px">${label}</div>
        <div style="font-size:40px;font-weight:800;font-family:var(--font-display);color:${color};line-height:1;letter-spacing:-2px">${val}</div>
@@ -2350,7 +2350,7 @@ function renderAnalytics() {
     </div>
 
     <!-- KPI GRID -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">
+    <div class="analytics-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px">
       ${kpi('📊', total, 'Total de Demandas')}
       ${kpi('✅', done,  'Concluídas', 'var(--success)', `${pct}% do total`)}
       ${kpi('⏳', doing, 'Em Andamento', 'var(--accent)')}
@@ -2360,7 +2360,7 @@ function renderAnalytics() {
     </div>
 
     <!-- PROGRESS BAR -->
-    <div style="background:linear-gradient(145deg,rgba(28,28,34,0.95),rgba(16,16,22,0.98));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:24px;margin-bottom:20px">
+    <div class="analytics-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px">
         <div>
           <div style="font-size:16px;font-weight:700;font-family:var(--font-display)">Progresso Global</div>
@@ -2368,7 +2368,7 @@ function renderAnalytics() {
         </div>
         <div style="font-size:48px;font-weight:800;color:var(--accent);font-family:var(--font-display);line-height:1;letter-spacing:-2px">${pct}<span style="font-size:24px">%</span></div>
       </div>
-      <div style="height:10px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden">
+      <div class="progress-track">
         <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#007AFF,#30D158);border-radius:99px;transition:width 1s cubic-bezier(0.16,1,0.3,1)"></div>
       </div>
       <div style="display:flex;gap:16px;margin-top:14px;flex-wrap:wrap">
@@ -2377,7 +2377,7 @@ function renderAnalytics() {
     </div>
 
     <!-- SVG BAR CHART -->
-    <div style="background:linear-gradient(145deg,rgba(28,28,34,0.95),rgba(16,16,22,0.98));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:24px;margin-bottom:20px">
+    <div class="analytics-card">
       <div style="font-size:16px;font-weight:700;font-family:var(--font-display);margin-bottom:20px">Distribuição por Status</div>
       <div style="overflow-x:auto">
         <svg viewBox="0 0 ${totalBarW} ${chartH + 32}" style="width:100%;max-width:${totalBarW}px;min-width:200px;display:block;overflow:visible">
@@ -2387,7 +2387,7 @@ function renderAnalytics() {
     </div>
 
     <!-- URGENCY BREAKDOWN -->
-    <div style="background:linear-gradient(145deg,rgba(28,28,34,0.95),rgba(16,16,22,0.98));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:24px;margin-bottom:20px">
+    <div class="analytics-card">
       <div style="font-size:16px;font-weight:700;font-family:var(--font-display);margin-bottom:18px">Distribuição por Urgência</div>
       ${urgBars.map(u => {
         const pctU = total ? Math.round(u.val / total * 100) : 0;
@@ -2396,7 +2396,7 @@ function renderAnalytics() {
             <span>${u.label}</span>
             <span style="color:${u.color};font-weight:700">${u.val} <span style="color:var(--label3);font-weight:400">(${pctU}%)</span></span>
           </div>
-          <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden">
+          <div class="progress-track" style="height:6px">
             <div style="height:100%;width:${pctU}%;background:${u.color};border-radius:99px;transition:width 0.8s ease"></div>
           </div>
         </div>`;
@@ -2404,14 +2404,14 @@ function renderAnalytics() {
     </div>
 
     <!-- TEAM WORKLOAD -->
-    <div style="background:linear-gradient(145deg,rgba(28,28,34,0.95),rgba(16,16,22,0.98));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:24px">
+    <div class="analytics-card" style="margin-bottom:0">
       <div style="font-size:16px;font-weight:700;font-family:var(--font-display);margin-bottom:20px">Carga por Membro</div>
       ${memberStats.length === 0
         ? '<div style="text-align:center;color:var(--label3);padding:20px">Nenhum membro ainda.</div>'
         : memberStats.map(m => {
           const pctM = m.total ? Math.round(m.done / m.total * 100) : 0;
           return `<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
-            <div style="width:40px;height:40px;border-radius:50%;background:${m.color||'#007AFF'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.3)">${initials(m.name)}</div>
+            <div style="width:40px;height:40px;border-radius:50%;background:${safeColor(m.color)};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.3)">${esc(initials(m.name))}</div>
             <div style="flex:1;min-width:0">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
                 <span style="font-size:14px;font-weight:600">${esc(m.name)} ${m.id === S.me?.id ? '<span style="font-size:10px;background:var(--accent-bg);color:var(--accent);padding:1px 7px;border-radius:99px;font-weight:700">Você</span>' : ''}</span>
@@ -2421,8 +2421,8 @@ function renderAnalytics() {
                   <span style="color:var(--label3)">${pctM}%</span>
                 </div>
               </div>
-              <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden">
-                <div style="height:100%;width:${pctM}%;background:${m.color||'#007AFF'};border-radius:99px;transition:width 0.8s ease"></div>
+              <div class="progress-track" style="height:6px">
+                <div style="height:100%;width:${pctM}%;background:${safeColor(m.color)};border-radius:99px;transition:width 0.8s ease"></div>
               </div>
             </div>
           </div>`;
@@ -2437,13 +2437,21 @@ function renderAnalytics() {
 function initParticles() {
   const canvas = document.getElementById('particles-canvas');
   if (!canvas) return;
+  // Respeita prefers-reduced-motion
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  // Evita inicializar mais de uma vez
+  if (canvas.dataset.initialized === '1') return;
+  canvas.dataset.initialized = '1';
+
   const ctx = canvas.getContext('2d');
   let W = canvas.width = canvas.offsetWidth;
   let H = canvas.height = canvas.offsetHeight;
-  window.addEventListener('resize', () => {
+  const onResize = () => {
     W = canvas.width = canvas.offsetWidth;
     H = canvas.height = canvas.offsetHeight;
-  });
+  };
+  window.addEventListener('resize', onResize);
+
   const particles = Array.from({length: 60}, () => ({
     x: Math.random() * W, y: Math.random() * H,
     r: Math.random() * 1.5 + 0.3,
@@ -2451,7 +2459,10 @@ function initParticles() {
     dy: (Math.random() - 0.5) * 0.3,
     alpha: Math.random() * 0.4 + 0.05
   }));
+
+  let rafId = null;
   function draw() {
+    if (document.hidden) { rafId = null; return; }
     ctx.clearRect(0, 0, W, H);
     particles.forEach(p => {
       ctx.beginPath();
@@ -2462,10 +2473,40 @@ function initParticles() {
       if (p.x < 0 || p.x > W) p.dx *= -1;
       if (p.y < 0 || p.y > H) p.dy *= -1;
     });
-    requestAnimationFrame(draw);
+    rafId = requestAnimationFrame(draw);
   }
+  window.__resumeParticles = () => { if (!rafId) draw(); };
   draw();
 }
+
+/* ═══════════════════════════════════════════════════════
+   GLOBAL UX BINDINGS (keyboard, visibility)
+═══════════════════════════════════════════════════════ */
+document.addEventListener('keydown', (e) => {
+  // ESC fecha qualquer overlay aberto
+  if (e.key === 'Escape') {
+    const openOverlay = document.querySelector('.overlay.open, .modal-overlay.open');
+    if (openOverlay) {
+      openOverlay.classList.remove('open');
+      return;
+    }
+  }
+  // Ctrl/Cmd + S salva demanda quando o drawer está aberto
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    const drawer = document.getElementById('card-overlay');
+    if (drawer?.classList.contains('open')) {
+      e.preventDefault();
+      saveCard();
+    }
+  }
+});
+
+// Pausa animação de partículas quando a aba fica oculta (economiza CPU/bateria)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && typeof window.__resumeParticles === 'function') {
+    window.__resumeParticles();
+  }
+});
 
 // Kick off
 init();
