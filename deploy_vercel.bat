@@ -1,12 +1,12 @@
 @echo off
 echo ===================================================
-echo Iniciando a publicacao do ATRIUM no Netlify...
+echo Iniciando a publicacao do ATRIUM na VERCEL...
 echo ===================================================
 echo.
 echo Se esta for sua primeira vez, o terminal vai pedir
 echo para voce autorizar o login no navegador.
 echo.
-npx netlify-cli deploy --prod
+npx vercel@latest --prod
 echo.
 echo Publicacao finalizada!
 pause

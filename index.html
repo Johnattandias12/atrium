@@ -421,13 +421,17 @@ create trigger on_auth_user_created
           </div>
         </div>
         <div id="profile-edit-block" style="display:none;padding:0 16px 20px 16px;animation:fadeDown 0.3s ease;">
-          <div class="grid2" style="margin-bottom:12px">
+          <div class="grid2" style="margin-bottom:12px; align-items: end;">
             <div class="field" style="margin:0"><label>Seu Nome</label><input type="text" id="p-name"></div>
-            <div class="field" style="margin:0"><label>Foto (URL)</label><input type="text" id="p-avatar" placeholder="https://..."></div>
+            <div class="field" style="margin:0">
+              <label>Foto do Perfil</label>
+              <button class="btn btn-sm btn-secondary btn-full" onclick="document.getElementById('p-avatar-file').click()">Subir do PC</button>
+              <input type="file" id="p-avatar-file" style="display:none" accept="image/*" onchange="handleProfilePic(this)">
+            </div>
           </div>
           <div style="display:flex;gap:10px">
             <button class="btn btn-sm btn-secondary flex-1" onclick="document.getElementById('profile-edit-block').style.display='none'">Cancelar</button>
-            <button class="btn btn-sm btn-primary flex-1" onclick="saveProfile()">Salvar Alterações</button>
+            <button class="btn btn-sm btn-primary flex-1" id="save-profile-btn" onclick="saveProfile()">Salvar Alterações</button>
           </div>
         </div>
       </div>
@@ -437,13 +441,10 @@ create trigger on_auth_user_created
         <div class="settings-group-title">Aparência</div>
         <div class="settings-row">
           <div class="settings-row-info">
-            <div class="settings-row-label">Tema</div>
-            <div class="settings-row-desc">Escolha entre modo escuro ou claro</div>
+            <div class="settings-row-label">Modo Claro</div>
+            <div class="settings-row-desc">Alterne entre o tema escuro e o tema claro premium.</div>
           </div>
-          <div style="display:flex;gap:8px">
-            <button id="theme-btn-dark" class="btn btn-sm" onclick="setTheme('dark')">Escuro</button>
-            <button id="theme-btn-light" class="btn btn-sm" onclick="setTheme('light')">Claro</button>
-          </div>
+          <button id="theme-toggle" class="toggle" onclick="toggleTheme()"></button>
         </div>
       </div>
 
@@ -823,6 +824,34 @@ async function loadCurrentUser() {
   S.me = data;
 }
 
+/* ── THEME MANAGER ── */
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const target = current === 'dark' ? 'light' : 'dark';
+  setTheme(target);
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('atrium_theme', theme);
+  updateThemeButtons();
+}
+
+function updateThemeButtons() {
+  const t = document.documentElement.getAttribute('data-theme') || 'dark';
+  const toggle = document.getElementById('theme-toggle');
+  if (toggle) {
+    if (t === 'light') toggle.classList.add('on');
+    else toggle.classList.remove('on');
+  }
+}
+
+// Inicializar tema antes do render
+(function() {
+  const saved = localStorage.getItem('atrium_theme') || 'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+})();
+
 async function loadProfiles() {
   const { data, error } = await db.from('profiles').select('*').order('name');
   if (error) throw error;
@@ -1074,8 +1103,8 @@ function renderCardHtml(c, index) {
   return `
   <div class="card status-${c.status}" data-id="${c.id}">
     <div class="card-urgency-bar ${isDone ? 'ub-done' : 'ub-'+c.urgency}"></div>
-    ${!isDone ? `<div class="card-priority-num">${index + 1}</div>` : ''}
-    <div style="padding-left:6px">
+    <div class="card-priority-num">${index + 1}</div>
+    <div style="padding-left:10px">
       <div class="card-head">
         <div class="card-title">${esc(c.title)}</div>
         ${isDone
@@ -1581,20 +1610,43 @@ function renderSettingsProfile() {
 function openProfileEdit() {
   const block = document.getElementById('profile-edit-block');
   const inp   = document.getElementById('p-name');
-  const avInp = document.getElementById('p-avatar');
   if (!block) return;
   if (inp)   inp.value = S.me?.name || '';
-  if (avInp) avInp.value = S.me?.avatar_url || '';
   block.style.display = block.style.display === 'none' ? 'block' : 'none';
+}
+
+async function handleProfilePic(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { showNotif('⚠️ Imagem muito grande (máx 2MB)'); return; }
+  
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const base64 = e.target.result;
+    document.getElementById('profile-avatar-lg-container').innerHTML = `<div class="avatar av-xl" style="background-image:url('${base64}')"></div>`;
+    S.me.avatar_url = base64; // Guardamos temporariamente
+    showNotif('📸 Foto selecionada! Clique em Salvar.');
+  };
+  reader.readAsDataURL(file);
 }
 
 async function saveProfile() {
   const name = document.getElementById('p-name')?.value?.trim();
-  const avatar_url = document.getElementById('p-avatar')?.value?.trim();
+  const avatar_url = S.me.avatar_url; // Pode ser a nova base64 ou a antiga
   if (!name) { showNotif('⚠️ Nome não pode ser vazio.'); return; }
   
+  setBtnLoading('save-profile-btn', true);
   const { error } = await db.from('profiles').update({ name, avatar_url }).eq('id', S.me.id);
-  if (error) { showNotif('❌ Erro ao salvar: ' + error.message); return; }
+  setBtnLoading('save-profile-btn', false);
+  
+  if (error) { 
+    if (error.message.includes('payload too large')) {
+      showNotif('❌ Foto muito pesada para o banco. Tente uma menor.');
+    } else {
+      showNotif('❌ Erro ao salvar: ' + error.message); 
+    }
+    return; 
+  }
   
   S.me.name = name;
   S.me.avatar_url = avatar_url;
