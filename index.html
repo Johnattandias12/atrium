@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <style>
 /* ═══════════════════════════════════════════════════════
    DESIGN TOKENS — Ultra Premium Black (Apple/Google)
@@ -55,29 +56,29 @@
   --shadow-lg: 0 16px 48px rgba(0,0,0,0.5);
 }
 
-/* ── LIGHT THEME ── */
+/* ── LIGHT THEME (Premium Brand Colors) ── */
 :root[data-theme="light"] {
-  --bg:        #F2F2F7;
-  --bg2:       #FBFBFF;
-  --surface:   rgba(255,255,255,0.85);
-  --surface2:  rgba(240,240,245,0.9);
-  --surface3:  #C7C7CC;
-  --separator: rgba(0,0,0,0.08);
-  --fill:      rgba(0,0,0,0.04);
-  --fill2:     rgba(0,0,0,0.07);
+  --bg:        #EBF2FA; /* Off-white with slight blue tint */
+  --bg2:       #E2ECF6;
+  --surface:   rgba(255,255,255,0.85); /* Glass over light bg */
+  --surface2:  rgba(242,246,252,0.95);
+  --surface3:  #D0E0F0;
+  --separator: rgba(10,132,255,0.15); /* Brand colored separator */
+  --fill:      rgba(10,132,255,0.06);
+  --fill2:     rgba(10,132,255,0.12);
   --label:     #1C1C1E;
-  --label2:    rgba(0,0,0,0.6);
-  --label3:    rgba(0,0,0,0.38);
-  --label4:    rgba(0,0,0,0.18);
-  --card-bg:   linear-gradient(145deg, rgba(255,255,255,0.95), rgba(248,248,252,0.98));
-  --card-border: rgba(0,0,0,0.08);
-  --sidebar-bg: rgba(255,255,255,0.9);
-  --topbar-bg: rgba(248,248,252,0.85);
-  --input-bg:  rgba(0,0,0,0.04);
-  --shadow:    0 4px 12px rgba(0,0,0,0.08);
-  --shadow-lg: 0 16px 48px rgba(0,0,0,0.12);
-  --accent:    #007AFF;
-  --accent-bg: rgba(0,122,255,0.1);
+  --label2:    rgba(0,0,0,0.65);
+  --label3:    rgba(0,0,0,0.45);
+  --label4:    rgba(0,0,0,0.25);
+  --card-bg:   linear-gradient(145deg, rgba(255,255,255,0.9), rgba(248,251,255,0.98));
+  --card-border: rgba(10,132,255,0.15);
+  --sidebar-bg: rgba(255,255,255,0.8);
+  --topbar-bg: rgba(255,255,255,0.85);
+  --input-bg:  rgba(255,255,255,0.5);
+  --shadow:    0 6px 16px rgba(10,132,255,0.08);
+  --shadow-lg: 0 16px 48px rgba(10,132,255,0.15);
+  --accent:    #0A84FF;
+  --accent-bg: rgba(10,132,255,0.15);
   --success:   #34C759;
   --danger:    #FF3B30;
   --warning:   #FF9500;
@@ -583,9 +584,13 @@ select option { background: var(--surface2); color: var(--label); }
   border-radius: var(--radius);
   border: 1px solid var(--card-border); padding: 14px;
   cursor: pointer;
-  transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.22s, border-color 0.22s;
+  transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.22s, border-color 0.22s, opacity 0.22s;
   position: relative; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.2);
 }
+.card.sortable-ghost { opacity: 0.1; }
+.card.drag-placeholder { background: var(--fill2); border: 2px dashed rgba(10,132,255,0.4); min-height: 80px; margin-bottom: 10px; border-radius: var(--radius); }
+:root[data-theme="light"] .card { box-shadow: var(--shadow); }
+:root[data-theme="light"] .card:hover { box-shadow: var(--shadow-lg); }
 .card::after {
   content:''; position:absolute; inset:0; border-radius:var(--radius);
   background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 50%);
@@ -800,16 +805,30 @@ select option { background: var(--surface2); color: var(--label); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { font-size: 14px; color: var(--label2); }
 
-/* ── RESPONSIVE ── */
+/* ── RESPONSIVE MOBILE TWEAKS ── */
 @media (max-width: 768px) {
-  .sidebar { width: 56px; }
-  .sidebar-logo-name, .sidebar-section-label, .nav-item span, .sidebar-user-info { display: none; }
-  .nav-item { justify-content: center; }
-  .sidebar-user { justify-content: center; }
-  .drawer { width: 100vw; }
-  .stats-row { display: none; }
+  /* Bottom Navigation for Mobile */
+  .sidebar { width: 100%; height: 60px; border-top: 1px solid var(--separator); border-right: none; position: fixed; bottom: 0; left: 0; z-index: 100; flex-direction: row; padding: 0 10px; justify-content: space-around; background: rgba(10,10,14,0.95); }
+  :root[data-theme="light"] .sidebar { background: rgba(255,255,255,0.95); }
+  .sidebar-logo, .sidebar-spacer, .sidebar-user, .sidebar-section-label { display: none; }
+  .nav-item { flex-direction: column; padding: 4px; font-size: 10px; gap: 4px; justify-content: center; }
+  .nav-item .nav-count { display: none; }
+  
+  .main { margin-bottom: 60px; }
+  .topbar { padding: 0 14px; }
   .topbar-title { font-size: 15px; }
-  .search-input { width: 140px; }
+  .search-input { width: 130px; }
+  .search-input:focus-within { width: 160px; }
+  
+  .board-container { scroll-snap-type: x mandatory; padding: 14px; display: flex; overscroll-behavior-x: contain; }
+  .board { gap: 14px; }
+  .column { width: 85vw; scroll-snap-align: center; }
+  .live-stats { display: none; } /* Hide floating stats on mobile */
+  
+  .drawer { width: 100vw; transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.32,0.72,0,1); border-left: none; border-top: 1px solid var(--separator); border-radius: 20px 20px 0 0; }
+  .overlay.open .drawer { transform: translateY(0); }
+  .stats-row { display: none; }
+  .settings-wrap, .team-wrap { max-width: 100%; }
 }
 </style>
 </head>
@@ -1663,13 +1682,24 @@ function onSearch(v) { clearTimeout(searchTimer); searchTimer = setTimeout(() =>
 function filteredCards(colId) {
   const fu = document.getElementById('filter-user')?.value || '';
   const fg = document.getElementById('filter-urgency')?.value || '';
-  return S.cards.filter(c => {
+  
+  // Sort cards by their position (if available) or fallback to created_at
+  let list = S.cards.filter(c => {
     if (c.status !== colId) return false;
     if (fu && c.assignee_id !== fu) return false;
     if (fg && c.urgency !== fg) return false;
     if (S.search && !c.title.toLowerCase().includes(S.search) && !(c.description||'').toLowerCase().includes(S.search)) return false;
     return true;
   });
+  
+  list.sort((a,b) => {
+    // try to use custom cfg.order map if Database doesn't have a position column.
+    const posA = cfg.cardOrder?.[a.id] ?? 0;
+    const posB = cfg.cardOrder?.[b.id] ?? 0;
+    if (posA !== posB) return posA - posB;
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
+  return list;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1686,10 +1716,7 @@ function renderBoard() {
         <div class="col-title">${col.label}</div>
         <div class="col-badge">${cards.length}</div>
       </div>
-      <div class="col-body" data-col="${col.id}"
-        ondragover="onDragOver(event)"
-        ondragleave="onDragLeave(event)"
-        ondrop="onDrop(event,'${col.id}')">
+      <div class="col-body" data-col="${col.id}" id="col-${col.id}">
         ${cards.length
           ? cards.map(renderCardHtml).join('')
           : `<div class="empty-col"><div class="empty-col-icon">📋</div><div class="empty-col-text">Vazio</div></div>`}
@@ -1700,11 +1727,63 @@ function renderBoard() {
     </div>`;
   }).join('');
 
-  // Attach drag events to all cards
+  // Attach SortableJS to all columns
+  COLS.forEach(col => {
+    const el = document.getElementById('col-' + col.id);
+    if (!el) return;
+    new Sortable(el, {
+      group: 'board',
+      animation: 250,
+      ghostClass: 'sortable-ghost',
+      dragClass: 'sortable-drag',
+      delay: window.innerWidth <= 768 ? 150 : 0, // Delay on mobile to allow scrolling
+      delayOnTouchOnly: true,
+      onEnd: async function (evt) {
+        const itemEl = evt.item;
+        const cardId = itemEl.dataset.id;
+        const toCol = evt.to.dataset.col;
+        const fromCol = evt.from.dataset.col;
+        
+        // Remove empty state from target if needed
+        const empty = evt.to.querySelector('.empty-col');
+        if (empty) empty.remove();
+        
+        const card = S.cards.find(c => c.id === cardId);
+        if (!card) return;
+        
+        let needsUpdate = false;
+        
+        // Update column if moved
+        if (toCol !== fromCol) {
+          card.status = toCol;
+          itemEl.className = 'card status-' + toCol;
+          // Optimistically update DB
+          db.from('cards').update({ status: toCol, updated_at: new Date().toISOString() }).eq('id', cardId).then(({error}) => {
+            if (error) { showNotif('❌ Erro ao mover coluna: ' + error.message); loadCards().then(renderBoard); }
+          });
+          needsUpdate = true;
+        }
+        
+        // Calculate and save new vertical order
+        const cardNodes = Array.from(evt.to.querySelectorAll('.card'));
+        if (!cfg.cardOrder) cfg.cardOrder = {};
+        cardNodes.forEach((node, index) => {
+          const cid = node.dataset.id;
+          cfg.cardOrder[cid] = index;
+        });
+        
+        persistCfg(); // Save vertical order locally so it is super fast
+        
+        if (needsUpdate || evt.oldIndex !== evt.newIndex) {
+          renderStats(); // Update counters if column changed
+          // We don't re-render everything to preserve DOM state during drag drop
+        }
+      }
+    });
+  });
+
+  // Attach click events
   board.querySelectorAll('.card[data-id]').forEach(el => {
-    el.draggable = true;
-    el.addEventListener('dragstart', e => { e.dataTransfer.setData('cardId', el.dataset.id); el.classList.add('is-dragging'); });
-    el.addEventListener('dragend', () => el.classList.remove('is-dragging'));
     el.addEventListener('click', e => {
       if (e.target.classList.contains('quick-assign-select') || e.target.closest('.quick-assign-select')) return;
       openCardDrawer(el.dataset.id);
@@ -1740,26 +1819,6 @@ function renderCardHtml(c) {
       </div>
     </div>
   </div>`;
-}
-
-/* ═══════════════════════════════════════════════════════
-   DRAG & DROP
-═══════════════════════════════════════════════════════ */
-function onDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
-function onDragLeave(e) { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('drag-over'); }
-async function onDrop(e, colId) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('drag-over');
-  const cardId = e.dataTransfer.getData('cardId');
-  if (!cardId) return;
-  // Optimistic update
-  const card = S.cards.find(c => c.id === cardId);
-  if (!card || card.status === colId) return;
-  card.status = colId;
-  renderBoard();
-  // Persist
-  const { error } = await db.from('cards').update({ status: colId, updated_at: new Date().toISOString() }).eq('id', cardId);
-  if (error) { showNotif('❌ Erro ao mover: ' + error.message); await loadCards(); renderBoard(); }
 }
 
 /* ═══════════════════════════════════════════════════════
