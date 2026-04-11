@@ -15,41 +15,72 @@
    DESIGN TOKENS — Ultra Premium Black (Apple/Google)
 ═══════════════════════════════════════════════════════ */
 :root {
-  /* Typography */
   --font-display: "Outfit", -apple-system, BlinkMacSystemFont, sans-serif;
   --font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   --font-mono: "SF Mono", ui-monospace, "Cascadia Code", monospace;
 
-  /* Colors: Deep Black Palette with Glassmorphism Base */
+  /* ─ DARK THEME (default) ─ */
   --bg:        #050505;
-  --surface:   rgba(24, 24, 27, 0.65);
+  --bg2:       #0a0a0e;
+  --surface:   rgba(24, 24, 27, 0.7);
   --surface2:  rgba(39, 39, 42, 0.75);
   --surface3:  #3f3f46;
   --separator: rgba(255,255,255,0.08);
   --fill:      rgba(255,255,255,0.06);
   --fill2:     rgba(255,255,255,0.1);
+  --label:     #FFFFFF;
+  --label2:    rgba(255,255,255,0.65);
+  --label3:    rgba(255,255,255,0.38);
+  --label4:    rgba(255,255,255,0.18);
+  --card-bg:   linear-gradient(145deg, rgba(35,35,42,0.85), rgba(18,18,24,0.97));
+  --card-border: rgba(255,255,255,0.07);
+  --sidebar-bg: rgba(10,10,14,0.8);
+  --topbar-bg: rgba(8,8,12,0.75);
+  --input-bg:  rgba(255,255,255,0.06);
 
-  --label:        #FFFFFF;
-  --label2:       rgba(255,255,255,0.65);
-  --label3:       rgba(255,255,255,0.40);
-  --label4:       rgba(255,255,255,0.20);
-
-  --accent:   #0A84FF;
+  --accent:    #0A84FF;
   --accent-bg: rgba(10,132,255,0.15);
-  --success:  #30D158;
-  --warning:  #FF9F0A;
-  --danger:   #FF453A;
-  --purple:   #BF5AF2;
-  --gold:     #FFD60A;
+  --success:   #30D158;
+  --warning:   #FF9F0A;
+  --danger:    #FF453A;
+  --purple:    #BF5AF2;
+  --gold:      #FFD60A;
 
-  /* Layout */
   --sidebar-w: 220px;
   --topbar-h: 56px;
   --radius-sm: 10px;
   --radius: 14px;
   --radius-lg: 24px;
-  --shadow: 0 4px 12px rgba(0,0,0,0.2);
-  --shadow-lg: 0 16px 40px rgba(0,0,0,0.4);
+  --shadow:    0 4px 12px rgba(0,0,0,0.3);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,0.5);
+}
+
+/* ── LIGHT THEME ── */
+:root[data-theme="light"] {
+  --bg:        #F2F2F7;
+  --bg2:       #FBFBFF;
+  --surface:   rgba(255,255,255,0.85);
+  --surface2:  rgba(240,240,245,0.9);
+  --surface3:  #C7C7CC;
+  --separator: rgba(0,0,0,0.08);
+  --fill:      rgba(0,0,0,0.04);
+  --fill2:     rgba(0,0,0,0.07);
+  --label:     #1C1C1E;
+  --label2:    rgba(0,0,0,0.6);
+  --label3:    rgba(0,0,0,0.38);
+  --label4:    rgba(0,0,0,0.18);
+  --card-bg:   linear-gradient(145deg, rgba(255,255,255,0.95), rgba(248,248,252,0.98));
+  --card-border: rgba(0,0,0,0.08);
+  --sidebar-bg: rgba(255,255,255,0.9);
+  --topbar-bg: rgba(248,248,252,0.85);
+  --input-bg:  rgba(0,0,0,0.04);
+  --shadow:    0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,0.12);
+  --accent:    #007AFF;
+  --accent-bg: rgba(0,122,255,0.1);
+  --success:   #34C759;
+  --danger:    #FF3B30;
+  --warning:   #FF9500;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -64,6 +95,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
+  transition: background 0.35s ease, color 0.35s ease;
 }
 
 /* ── DYNAMIC BACKGROUND ── */
@@ -100,9 +132,46 @@ body {
 .ticker-content {
   display: inline-block; animation: ticker 90s linear infinite;
   font-family: var(--font-display); font-size: 11px; font-weight: 600;
-  color: rgba(255,255,255,0.25); letter-spacing: 2px; text-transform: uppercase;
+  color: rgba(255,255,255,0.18); letter-spacing: 2px; text-transform: uppercase;
 }
+:root[data-theme="light"] .ticker-content { color: rgba(0,0,0,0.25); }
+:root[data-theme="light"] .ticker-wrap { background: rgba(0,122,255,0.04); }
 @keyframes ticker { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+
+/* ── WELCOME OVERLAY (post-login) ── */
+#welcome-overlay {
+  position: fixed; inset: 0; z-index: 8000; display: flex;
+  align-items: center; justify-content: center; flex-direction: column;
+  background: radial-gradient(ellipse at 50% 40%, rgba(10,132,255,0.18) 0%, rgba(5,5,10,0.98) 60%);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+#welcome-overlay.show {
+  opacity: 1; pointer-events: all;
+}
+.welcome-ring {
+  width: 100px; height: 100px; border-radius: 28px;
+  background: linear-gradient(135deg, #4da9ff, #1a8cff);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 52px; font-weight: 800; font-family: var(--font-display); color: #fff;
+  box-shadow: 0 0 60px rgba(10,132,255,0.5), 0 8px 32px rgba(0,0,0,0.4);
+  animation: welcomePulse 2s ease-in-out infinite;
+  margin-bottom: 28px;
+}
+.welcome-hello {
+  font-family: var(--font-display); font-size: 44px; font-weight: 800;
+  letter-spacing: -1.5px; color: #fff; line-height: 1; margin-bottom: 10px;
+  background: linear-gradient(135deg, #fff 40%, rgba(255,255,255,0.55));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.welcome-sub {
+  font-family: var(--font); font-size: 15px; color: rgba(255,255,255,0.45);
+  letter-spacing: 0.3px;
+}
+@keyframes welcomePulse {
+  0%,100% { box-shadow: 0 0 40px rgba(10,132,255,0.4), 0 8px 32px rgba(0,0,0,0.4); }
+  50% { box-shadow: 0 0 80px rgba(10,132,255,0.7), 0 8px 32px rgba(0,0,0,0.4); }
+}
 
 /* ── WELCOME SPLASH ── */
 #welcome-splash {
@@ -338,12 +407,13 @@ select option { background: var(--surface2); color: var(--label); }
 /* ── SIDEBAR ── */
 .sidebar {
   width: var(--sidebar-w); flex-shrink: 0;
-  background: rgba(10,10,12,0.75);
-  backdrop-filter: blur(40px);
+  background: var(--sidebar-bg);
+  backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
   border-right: 1px solid var(--separator);
   display: flex; flex-direction: column;
   padding: 12px 10px;
   overflow-y: auto; z-index: 10;
+  transition: background 0.35s ease;
 }
 .sidebar-logo {
   display: flex; align-items: center; gap: 10px;
@@ -409,14 +479,15 @@ select option { background: var(--surface2); color: var(--label); }
   height: var(--topbar-h); flex-shrink: 0;
   display: flex; align-items: center; gap: 12px;
   padding: 0 20px; border-bottom: 1px solid var(--separator);
-  background: rgba(10,10,12,0.7); backdrop-filter: blur(40px);
+  background: var(--topbar-bg); backdrop-filter: blur(40px);
+  transition: background 0.35s ease;
 }
 .topbar-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
 .topbar-spacer { flex: 1; }
 
 .search-input {
   display: flex; align-items: center; gap: 8px;
-  background: var(--surface); border: 1px solid var(--separator);
+  background: var(--input-bg); border: 1px solid var(--separator);
   border-radius: 9px; padding: 0 12px; height: 32px; width: 220px;
   transition: all 0.15s;
 }
@@ -432,7 +503,7 @@ select option { background: var(--surface2); color: var(--label); }
 .search-icon { color: var(--label3); font-size: 13px; flex-shrink: 0; }
 
 .filter-select {
-  background: var(--surface); border: 1px solid var(--separator);
+  background: var(--input-bg); border: 1px solid var(--separator);
   border-radius: 8px; padding: 0 10px; height: 32px;
   font-family: var(--font); font-size: 13px; color: var(--label2);
   cursor: pointer; outline: none;
@@ -493,22 +564,32 @@ select option { background: var(--surface2); color: var(--label); }
 
 /* ── CARDS ── */
 .card {
-  background: linear-gradient(145deg, rgba(35,35,40,0.8) 0%, rgba(20,20,25,0.95) 100%);
+  background: var(--card-bg);
   backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
   border-radius: var(--radius);
-  border: 1px solid rgba(255,255,255,0.07); padding: 14px;
+  border: 1px solid var(--card-border); padding: 14px;
   cursor: pointer;
-  transition: transform 0.2s cubic-bezier(0.16,1,0.3,1), box-shadow 0.2s, border-color 0.2s;
-  position: relative; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  transition: transform 0.22s cubic-bezier(0.16,1,0.3,1), box-shadow 0.22s, border-color 0.22s;
+  position: relative; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.2);
 }
 .card::after {
   content:''; position:absolute; inset:0; border-radius:var(--radius);
   background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 50%);
   pointer-events:none;
 }
-.card:hover { box-shadow: 0 16px 32px rgba(0,0,0,0.5); border-color: rgba(10,132,255,0.3); transform: translateY(-3px) scale(1.01); }
-.card:active { transform: scale(0.98); transition-duration: 0.1s; }
-.card.is-dragging { opacity: 0.5; cursor: grabbing; }
+.card:hover { box-shadow: 0 16px 32px rgba(0,0,0,0.35); transform: translateY(-3px) scale(1.01); }
+.card:active { transform: scale(0.98); transition-duration: 0.08s; }
+.card.is-dragging { opacity: 0.45; cursor: grabbing; }
+
+/* Status-based card theming */
+.card.status-doing { border-color: rgba(10,132,255,0.3); }
+.card.status-doing::before { content:''; position:absolute; inset:0; border-radius:var(--radius); background:rgba(10,132,255,0.04); pointer-events:none; }
+.card.status-review { border-color: rgba(255,159,10,0.35); }
+.card.status-review::before { content:''; position:absolute; inset:0; border-radius:var(--radius); background:rgba(255,159,10,0.04); pointer-events:none; }
+.card.status-done { border-color: rgba(48,209,88,0.4); box-shadow: 0 4px 20px rgba(48,209,88,0.1); }
+.card.status-done::before { content:''; position:absolute; inset:0; border-radius:var(--radius); background:rgba(48,209,88,0.05); pointer-events:none; }
+.card.status-done .card-title { color: var(--success); }
+.card.status-done .card-urgency-bar { background: var(--success) !important; }
 .card-urgency-bar {
   position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
 }
@@ -942,8 +1023,15 @@ create trigger on_auth_user_created
   </div>
 </div>
 
+<!-- ═══════════════════ WELCOME (post-login) ═══════════════════ -->
+<div id="welcome-overlay">
+  <div class="welcome-ring">A</div>
+  <div class="welcome-hello" id="welcome-hello-text">Olá!</div>
+  <div class="welcome-sub" id="welcome-sub-text">Bem-vindo de volta ao ATRIUM</div>
+</div>
+
 <!-- ═══════════════════ APP ═══════════════════ -->
-<div id="app" class="hidden" style="position: relative; overflow: hidden; background: #000;">
+<div id="app" class="hidden" style="position: relative; overflow: hidden; background: var(--bg);">
   <!-- Animated canvas background -->
   <canvas id="particles-canvas"></canvas>
   <div class="dynamic-bg"></div>
@@ -1040,34 +1128,90 @@ create trigger on_auth_user_created
     </div>
 
     <div id="view-settings" class="settings-wrap hidden">
-      <h2 style="font-size:22px;font-weight:800;letter-spacing:-0.5px;margin-bottom:24px;font-family:var(--font-display)">Configurações</h2>
+      <!-- SETTINGS HEADER -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:28px">
+        <h2 style="font-size:22px;font-weight:800;letter-spacing:-0.5px;font-family:var(--font-display)">Preferências</h2>
+        <div style="font-size:12px;color:var(--label3)">ATRIUM v2.0</div>
+      </div>
+
+      <!-- PROFILE SECTION -->
       <div class="settings-group">
-        <div class="settings-group-title">IA — Anthropic Claude</div>
-        <div class="settings-row">
-          <div class="settings-row-info">
-            <div class="settings-row-label">Chave de API</div>
-            <div class="settings-row-desc">Necessária para sugestões inteligentes nos cards.</div>
+        <div class="settings-group-title">Meu Perfil</div>
+        <div class="settings-row" style="gap:20px;padding:20px 16px">
+          <div id="profile-avatar-lg" style="width:64px;height:64px;border-radius:50%;background:#007AFF;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:#fff;flex-shrink:0;cursor:pointer;position:relative;" onclick="document.getElementById('avatar-color-picker').click()" title="Clique para mudar a cor">
+            <div id="profile-av-initials" style="pointer-events:none">?</div>
+            <div style="position:absolute;bottom:0;right:0;width:20px;height:20px;background:var(--accent);border-radius:50%;border:2px solid var(--bg);display:flex;align-items:center;justify-content:center;font-size:10px;">✏️</div>
           </div>
-          <input type="password" id="ai-key-input" placeholder="sk-ant-…" style="width:200px;padding:7px 10px;font-size:13px;border-radius:8px;border:1px solid var(--separator);font-family:var(--font);outline:none;" oninput="saveAiKey(this.value)">
+          <input type="color" id="avatar-color-picker" style="display:none" onchange="saveProfileColor(this.value)">
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:700" id="profile-display-name">Carregando...</div>
+            <div style="font-size:13px;color:var(--label3);margin-top:2px" id="profile-display-email"></div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-secondary btn-sm" onclick="openProfileEdit()">Editar perfil</button>
+              <button class="btn btn-danger-soft btn-sm" onclick="doLogout()">Sair da conta</button>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="settings-group">
-        <div class="settings-group-title">Conexão Supabase</div>
-        <div class="settings-row">
-          <div class="settings-row-info">
-            <div class="settings-row-label">Reconfigurar</div>
-            <div class="settings-row-desc">Alterar URL e chave do projeto.</div>
+
+      <!-- EDIT PROFILE MODAL INLINE -->
+      <div id="profile-edit-block" style="display:none" class="settings-group">
+        <div class="settings-group-title">Editar Informações</div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div class="field" style="margin:0"><label>Nome</label><input type="text" id="p-name" placeholder="Seu nome"></div>
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button class="btn btn-secondary flex-1" onclick="document.getElementById('profile-edit-block').style.display='none'">Cancelar</button>
+            <button class="btn btn-primary flex-1" onclick="saveProfileName()">Salvar</button>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="goStep(1);showScreen('setup')">Configurar</button>
-        </div>
-        <div class="settings-row">
-          <div class="settings-row-info">
-            <div class="settings-row-label">Sair da conta</div>
-            <div class="settings-row-desc">Encerrar sessão atual.</div>
-          </div>
-          <button class="btn btn-danger-soft btn-sm" onclick="doLogout()">Sair</button>
         </div>
       </div>
+
+      <!-- APPEARANCE -->
+      <div class="settings-group">
+        <div class="settings-group-title">Aparência</div>
+        <div class="settings-row">
+          <div class="settings-row-info">
+            <div class="settings-row-label">Tema</div>
+            <div class="settings-row-desc">Escolha entre modo escuro ou claro</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button id="theme-btn-dark" class="btn btn-sm" onclick="setTheme('dark')" style="gap:6px">🌙 Escuro</button>
+            <button id="theme-btn-light" class="btn btn-sm" onclick="setTheme('light')" style="gap:6px">☀️ Claro</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADVANCED (collapsible) -->
+      <div class="settings-group">
+        <div class="settings-group-title" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center" onclick="toggleAdvanced()">
+          <span>Avançado</span>
+          <span id="advanced-arrow" style="font-size:11px;color:var(--label3);transition:transform 0.2s">▼</span>
+        </div>
+        <div id="advanced-section" style="display:none">
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">IA — Chave Anthropic</div>
+              <div class="settings-row-desc">Necessária para sugestões inteligentes nos cards.</div>
+            </div>
+            <input type="password" id="ai-key-input" placeholder="sk-ant-…" style="width:180px;padding:7px 10px;font-size:13px;border-radius:8px;border:1px solid var(--separator);background:var(--input-bg);color:var(--label);font-family:var(--font);outline:none;" oninput="saveAiKey(this.value)">
+          </div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Conexão Supabase</div>
+              <div class="settings-row-desc">Reconfigurar URL e chave do banco de dados.</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="goStep(1);showScreen('setup')">Reconfigurar</button>
+          </div>
+          <div class="settings-row" style="border-bottom:none">
+            <div class="settings-row-info">
+              <div class="settings-row-label" style="color:var(--danger)">Redefinir tudo</div>
+              <div class="settings-row-desc">Apaga a configuração local e reinicia o wizard.</div>
+            </div>
+            <button class="btn btn-danger-soft btn-sm" onclick="resetAndReload()">Redefinir</button>
+          </div>
+        </div>
+      </div>
+
     </div><!-- end view-settings -->
     </div><!-- end view-main-content -->
     
@@ -1185,11 +1329,22 @@ create trigger on_auth_user_created
    CONFIG & SUPABASE
 ═══════════════════════════════════════════════════════ */
 const CFG_KEY = 'atrium_cfg';
-let cfg = { supabaseUrl: '', supabaseKey: '', anthropicKey: '' };
+// ⚠️ ADMIN: Fill in your Supabase credentials below so users never see the setup screen.
+const ATRIUM_DEFAULTS = {
+  supabaseUrl: '',  // ex: 'https://xyzxyz.supabase.co'
+  supabaseKey: '',  // ex: 'eyJhbGci...'
+};
+let cfg = { supabaseUrl: '', supabaseKey: '', anthropicKey: '', theme: 'dark' };
 let db = null;
 
 function loadConfig() {
   try { const s = localStorage.getItem(CFG_KEY); if (s) cfg = { ...cfg, ...JSON.parse(s) }; } catch(e){}
+  // Fall back to hardcoded defaults if not set locally
+  if (!cfg.supabaseUrl && ATRIUM_DEFAULTS.supabaseUrl) cfg.supabaseUrl = ATRIUM_DEFAULTS.supabaseUrl;
+  if (!cfg.supabaseKey && ATRIUM_DEFAULTS.supabaseKey) cfg.supabaseKey = ATRIUM_DEFAULTS.supabaseKey;
+  // Apply saved theme
+  document.documentElement.setAttribute('data-theme', cfg.theme || 'dark');
+  updateThemeButtons();
 }
 function initDb() {
   if (!window.supabase || typeof window.supabase.createClient !== 'function') {
@@ -1198,6 +1353,29 @@ function initDb() {
   const { createClient } = window.supabase;
   if (!cfg.supabaseUrl || !cfg.supabaseKey) throw new Error('CONFIG_MISSING');
   db = createClient(cfg.supabaseUrl, cfg.supabaseKey);
+}
+
+/* Theme system */
+function setTheme(t) {
+  cfg.theme = t;
+  persistCfg();
+  document.documentElement.setAttribute('data-theme', t);
+  updateThemeButtons();
+}
+function updateThemeButtons() {
+  const t = cfg.theme || 'dark';
+  const dbtn = document.getElementById('theme-btn-dark');
+  const lbtn = document.getElementById('theme-btn-light');
+  if (dbtn) dbtn.className = 'btn btn-sm ' + (t === 'dark' ? 'btn-primary' : 'btn-secondary');
+  if (lbtn) lbtn.className = 'btn btn-sm ' + (t === 'light' ? 'btn-primary' : 'btn-secondary');
+}
+function toggleAdvanced() {
+  const sec = document.getElementById('advanced-section');
+  const arrow = document.getElementById('advanced-arrow');
+  if (!sec) return;
+  const open = sec.style.display !== 'none';
+  sec.style.display = open ? 'none' : 'block';
+  if (arrow) arrow.style.transform = open ? '' : 'rotate(180deg)';
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1341,10 +1519,12 @@ async function bootApp() {
     renderSidebar();
     renderBoard();
     renderStats();
+    renderSettingsProfile();
     if (document.getElementById('ai-key-input')) document.getElementById('ai-key-input').value = cfg.anthropicKey || '';
     showScreen('app');
     switchView('board', document.getElementById('nav-board'));
     setTimeout(initParticles, 100);
+    showWelcome();
   } catch(e) {
     if (e.message && e.message.includes('public.profiles')) {
       showNotif('⚠️ Tabelas do banco não encontradas! Siga o passo a passo.');
@@ -1355,6 +1535,18 @@ async function bootApp() {
     }
     document.getElementById('loading-screen').classList.add('hidden');
   }
+}
+
+function showWelcome() {
+  const ov = document.getElementById('welcome-overlay');
+  const name = S.me?.name?.split(' ')[0] || 'Você';
+  const hello = document.getElementById('welcome-hello-text');
+  const sub   = document.getElementById('welcome-sub-text');
+  if (hello) hello.textContent = `Olá, ${name}!`;
+  if (sub)   sub.textContent   = 'Bem-vindo de volta ao ATRIUM · Beyonder 2026';
+  if (!ov) return;
+  ov.classList.add('show');
+  setTimeout(() => { ov.style.opacity = '0'; setTimeout(() => { ov.classList.remove('show'); ov.style.opacity = ''; }, 500); }, 2200);
 }
 
 async function loadCurrentUser() {
@@ -1515,18 +1707,22 @@ function renderCardHtml(c) {
   const soon = c.deadline && c.deadline <= soonStr && c.deadline >= today && c.status !== 'done';
   const dateClass = overdue ? 'overdue' : soon ? 'soon' : '';
   const a = c.assignee;
+  const isDone = c.status === 'done';
   return `
-  <div class="card" data-id="${c.id}">
-    <div class="card-urgency-bar ub-${c.urgency}"></div>
+  <div class="card status-${c.status}" data-id="${c.id}">
+    <div class="card-urgency-bar ${isDone ? '' : 'ub-'+c.urgency}" style="${isDone?'background:var(--success)':''}"></div>
     <div style="padding-left:8px">
       <div class="card-head">
-        <div class="card-title">${esc(c.title)}</div>
-        <div class="urgency-pill u-${c.urgency}">${URGENCY_LABELS[c.urgency]}</div>
+        <div class="card-title">${isDone ? '✓ ' : ''}${esc(c.title)}</div>
+        ${isDone
+          ? `<div class="urgency-pill" style="background:rgba(48,209,88,0.15);color:var(--success)">Concluído</div>`
+          : `<div class="urgency-pill u-${c.urgency}">${URGENCY_LABELS[c.urgency]}</div>`
+        }
       </div>
       ${c.description ? `<div class="card-desc">${esc(c.description)}</div>` : ''}
       <div class="card-footer">
-        ${a ? `<div class="card-assignee"><div class="avatar av-sm" style="background:${a.color||'#007AFF'};box-shadow:0 0 8px rgba(0,0,0,0.5)">${initials(a.name)}</div><span class="truncate" style="font-weight:600">${a.name.split(' ')[0]}</span><select class="quick-assign-select" onchange="quickAssign('${c.id}', this.value)" onclick="event.stopPropagation()"><option value="">Retirar...</option>${S.profiles.map(p=>`<option value="${p.id}" ${p.id===a.id?'selected':''}>${p.name}</option>`).join('')}</select></div>` : `<div class="card-assignee"><div class="avatar av-sm" style="background:var(--fill)">👤</div><span class="truncate" style="opacity:0.6">Atribuir dev</span><select class="quick-assign-select" onchange="quickAssign('${c.id}', this.value)" onclick="event.stopPropagation()"><option value="">Escolher dev...</option>${S.profiles.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`}
-        ${c.deadline ? `<div class="card-date ${dateClass}">${overdue?'⚠':soon?'🕐':''}${fmtDate(c.deadline)}</div>` : ''}
+        ${a ? `<div class="card-assignee"><div class="avatar av-sm" style="background:${a.color||'#007AFF'};box-shadow:0 0 8px rgba(0,0,0,0.5)">${initials(a.name)}</div><span class="truncate" style="font-weight:600">${a.name.split(' ')[0]}</span><select class="quick-assign-select" onchange="quickAssign('${c.id}', this.value)" onclick="event.stopPropagation()"><option value="">Retirar...</option>${S.profiles.map(p=>`<option value="${p.id}" ${p.id===a.id?'selected':''}>${p.name}</option>`).join('')}</select></div>` : `<div class="card-assignee"><div class="avatar av-sm" style="background:var(--fill)">👤</div><span class="truncate" style="opacity:0.6">Atribuir...</span><select class="quick-assign-select" onchange="quickAssign('${c.id}', this.value)" onclick="event.stopPropagation()"><option value="">Escolher...</option>${S.profiles.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`}
+        ${c.deadline ? `<div class="card-date ${dateClass}">${overdue?'⚠':soon?'🕐':'📅'}${fmtDate(c.deadline)}</div>` : ''}
       </div>
     </div>
   </div>`;
@@ -2033,6 +2229,207 @@ function resetAndReload() {
   localStorage.removeItem(CFG_KEY);
   location.reload();
 }
+
+/* ═══════════════════════════════════════════════════════
+   PROFILE & SETTINGS
+═══════════════════════════════════════════════════════ */
+function renderSettingsProfile() {
+  if (!S.me) return;
+  const avEl  = document.getElementById('profile-avatar-lg');
+  const initEl = document.getElementById('profile-av-initials');
+  const nameEl = document.getElementById('profile-display-name');
+  const emailEl = document.getElementById('profile-display-email');
+  if (avEl)   avEl.style.background = S.me.color || '#007AFF';
+  if (initEl) initEl.textContent = initials(S.me.name);
+  if (nameEl) nameEl.textContent = S.me.name || 'Usuário';
+  if (emailEl) emailEl.textContent = S.session?.user?.email || '';
+  updateThemeButtons();
+}
+
+function openProfileEdit() {
+  const block = document.getElementById('profile-edit-block');
+  const inp   = document.getElementById('p-name');
+  if (!block) return;
+  if (inp) inp.value = S.me?.name || '';
+  block.style.display = block.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveProfileName() {
+  const name = document.getElementById('p-name')?.value?.trim();
+  if (!name) { showNotif('⚠️ Nome não pode ser vazio.'); return; }
+  const { error } = await db.from('profiles').update({ name }).eq('id', S.me.id);
+  if (error) { showNotif('❌ Erro ao salvar: ' + error.message); return; }
+  S.me.name = name;
+  const mp = S.profiles.find(p => p.id === S.me.id);
+  if (mp) mp.name = name;
+  renderSidebar(); renderSettingsProfile();
+  document.getElementById('profile-edit-block').style.display = 'none';
+  showNotif('✅ Nome atualizado!');
+}
+
+async function saveProfileColor(color) {
+  const { error } = await db.from('profiles').update({ color }).eq('id', S.me.id);
+  if (error) { showNotif('❌ Erro ao salvar cor.'); return; }
+  S.me.color = color;
+  const mp = S.profiles.find(p => p.id === S.me.id);
+  if (mp) mp.color = color;
+  const avEl  = document.getElementById('profile-avatar-lg');
+  if (avEl) avEl.style.background = color;
+  renderSidebar();
+  showNotif('✅ Cor atualizada!');
+}
+
+/* ═══════════════════════════════════════════════════════
+   ANALYTICS — Professional SVG Charts
+═══════════════════════════════════════════════════════ */
+let analyticsFilter = 'all';
+
+function renderAnalytics() {
+  const total   = S.cards.length;
+  const done    = S.cards.filter(c => c.status === 'done').length;
+  const doing   = S.cards.filter(c => c.status === 'doing').length;
+  const review  = S.cards.filter(c => c.status === 'review').length;
+  const todo    = S.cards.filter(c => c.status === 'todo').length;
+  const critica = S.cards.filter(c => c.urgency === 'critica' && c.status !== 'done').length;
+  const overdue = S.cards.filter(c => c.deadline && c.deadline < todayStr() && c.status !== 'done').length;
+  const pct     = total ? Math.round(done / total * 100) : 0;
+
+  // SVG bar chart
+  const barData = [
+    { label: 'A Fazer', val: todo,   color: '#636366' },
+    { label: 'Andamento',val: doing, color: '#0A84FF' },
+    { label: 'Revisão', val: review, color: '#FF9F0A' },
+    { label: 'Concluído',val: done,  color: '#30D158' },
+  ];
+  const maxVal = Math.max(...barData.map(d => d.val), 1);
+  const barW = 52, barGap = 20, chartH = 130, barRadius = 6;
+  const totalBarW = barData.length * barW + (barData.length - 1) * barGap;
+  const svgBars = barData.map((d, i) => {
+    const h = Math.max(4, (d.val / maxVal) * chartH);
+    const x = i * (barW + barGap);
+    const y = chartH - h;
+    return `
+      <g>
+        <rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="${d.color}" rx="${barRadius}" opacity="0.9"/>
+        <rect x="${x}" y="${y}" width="${barW}" height="${Math.min(h, 12)}" fill="${d.color}" rx="${barRadius}"/>
+        <text x="${x + barW/2}" y="${chartH + 18}" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.45)" font-family="Inter,sans-serif">${d.label}</text>
+        <text x="${x + barW/2}" y="${y - 6}" text-anchor="middle" font-size="13" font-weight="700" fill="${d.color}" font-family="Outfit,sans-serif">${d.val}</text>
+      </g>`;
+  }).join('');
+
+  // Urgency donut (simple arcs)
+  const urgBars = [
+    { label: '🟢 Baixa',  val: S.cards.filter(c=>c.urgency==='baixa').length,   color: '#30D158' },
+    { label: '🟡 Média',  val: S.cards.filter(c=>c.urgency==='media').length,   color: '#FF9F0A' },
+    { label: '🟠 Alta',   val: S.cards.filter(c=>c.urgency==='alta').length,    color: '#FF6B00' },
+    { label: '🔴 Crítica',val: S.cards.filter(c=>c.urgency==='critica').length, color: '#FF453A' },
+  ];
+
+  const memberStats = S.profiles.map(p => {
+    const asgn  = S.cards.filter(c => c.assignee_id === p.id);
+    const doneP = asgn.filter(c => c.status === 'done').length;
+    const actP  = asgn.filter(c => c.status !== 'done').length;
+    return { ...p, total: asgn.length, done: doneP, active: actP };
+  }).sort((a,b) => b.active - a.active);
+
+  const kpi = (icon, val, label, color='var(--label)', sub='') =>
+    `<div style="background:linear-gradient(145deg,rgba(28,28,34,0.95),rgba(16,16,22,0.98));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:20px;position:relative;overflow:hidden">
+       <div style="position:absolute;top:12px;right:14px;font-size:28px;opacity:0.12">${icon}</div>
+       <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--label3);font-weight:700;margin-bottom:8px">${label}</div>
+       <div style="font-size:40px;font-weight:800;font-family:var(--font-display);color:${color};line-height:1;letter-spacing:-2px">${val}</div>
+       ${sub ? `<div style="font-size:12px;color:var(--label3);margin-top:6px">${sub}</div>` : ''}
+     </div>`;
+
+  document.getElementById('analytics-content').innerHTML = `
+    <!-- FILTERS -->
+    <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap">
+      ${['all','7','30'].map(f => `
+        <button onclick="analyticsFilter='${f}';renderAnalytics()" style="padding:6px 16px;border-radius:99px;border:1px solid ${analyticsFilter===f?'var(--accent)':'var(--separator)'};background:${analyticsFilter===f?'var(--accent-bg)':'transparent'};color:${analyticsFilter===f?'var(--accent)':'var(--label3)'};font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s">
+          ${f==='all'?'Tudo':f==='7'?'7 dias':'30 dias'}
+        </button>`).join('')}
+    </div>
+
+    <!-- KPI GRID -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">
+      ${kpi('📊', total, 'Total de Demandas')}
+      ${kpi('✅', done,  'Concluídas', 'var(--success)', `${pct}% do total`)}
+      ${kpi('⏳', doing, 'Em Andamento', 'var(--accent)')}
+      ${kpi('📋', todo,  'À Fazer')}
+      ${kpi('🚨', critica, 'Críticas Ativas', critica>0?'var(--danger)':'var(--label3)')}
+      ${kpi('⚠️', overdue, 'Atrasadas', overdue>0?'var(--warning)':'var(--label3)')}
+    </div>
+
+    <!-- PROGRESS BAR -->
+    <div style="background:linear-gradient(145deg,rgba(28,28,34,0.95),rgba(16,16,22,0.98));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:24px;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px">
+        <div>
+          <div style="font-size:16px;font-weight:700;font-family:var(--font-display)">Progresso Global</div>
+          <div style="font-size:12px;color:var(--label3);margin-top:3px">${done} de ${total} demandas concluídas</div>
+        </div>
+        <div style="font-size:48px;font-weight:800;color:var(--accent);font-family:var(--font-display);line-height:1;letter-spacing:-2px">${pct}<span style="font-size:24px">%</span></div>
+      </div>
+      <div style="height:10px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#007AFF,#30D158);border-radius:99px;transition:width 1s cubic-bezier(0.16,1,0.3,1)"></div>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:14px;flex-wrap:wrap">
+        ${barData.map(d => `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--label3)"><div style="width:10px;height:10px;border-radius:3px;background:${d.color}"></div>${d.label}: <b style="color:var(--label)">${d.val}</b></div>`).join('')}
+      </div>
+    </div>
+
+    <!-- SVG BAR CHART -->
+    <div style="background:linear-gradient(145deg,rgba(28,28,34,0.95),rgba(16,16,22,0.98));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:24px;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:700;font-family:var(--font-display);margin-bottom:20px">Distribuição por Status</div>
+      <div style="overflow-x:auto">
+        <svg viewBox="0 0 ${totalBarW} ${chartH + 32}" style="width:100%;max-width:${totalBarW}px;min-width:200px;display:block;overflow:visible">
+          ${svgBars}
+        </svg>
+      </div>
+    </div>
+
+    <!-- URGENCY BREAKDOWN -->
+    <div style="background:linear-gradient(145deg,rgba(28,28,34,0.95),rgba(16,16,22,0.98));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:24px;margin-bottom:20px">
+      <div style="font-size:16px;font-weight:700;font-family:var(--font-display);margin-bottom:18px">Distribuição por Urgência</div>
+      ${urgBars.map(u => {
+        const pctU = total ? Math.round(u.val / total * 100) : 0;
+        return `<div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+            <span>${u.label}</span>
+            <span style="color:${u.color};font-weight:700">${u.val} <span style="color:var(--label3);font-weight:400">(${pctU}%)</span></span>
+          </div>
+          <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${pctU}%;background:${u.color};border-radius:99px;transition:width 0.8s ease"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- TEAM WORKLOAD -->
+    <div style="background:linear-gradient(145deg,rgba(28,28,34,0.95),rgba(16,16,22,0.98));border:1px solid rgba(255,255,255,0.07);border-radius:var(--radius);padding:24px">
+      <div style="font-size:16px;font-weight:700;font-family:var(--font-display);margin-bottom:20px">Carga por Membro</div>
+      ${memberStats.length === 0
+        ? '<div style="text-align:center;color:var(--label3);padding:20px">Nenhum membro ainda.</div>'
+        : memberStats.map(m => {
+          const pctM = m.total ? Math.round(m.done / m.total * 100) : 0;
+          return `<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
+            <div style="width:40px;height:40px;border-radius:50%;background:${m.color||'#007AFF'};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.3)">${initials(m.name)}</div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+                <span style="font-size:14px;font-weight:600">${esc(m.name)} ${m.id === S.me?.id ? '<span style="font-size:10px;background:var(--accent-bg);color:var(--accent);padding:1px 7px;border-radius:99px;font-weight:700">Você</span>' : ''}</span>
+                <div style="display:flex;gap:10px;font-size:12px">
+                  <span style="color:var(--warning)">${m.active} ativa${m.active!==1?'s':''}</span>
+                  <span style="color:var(--success)">${m.done} conc.</span>
+                  <span style="color:var(--label3)">${pctM}%</span>
+                </div>
+              </div>
+              <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden">
+                <div style="height:100%;width:${pctM}%;background:${m.color||'#007AFF'};border-radius:99px;transition:width 0.8s ease"></div>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+    </div>`;
+}
+
 
 /* ═══════════════════════════════════════════════════════
    PARTICLE SYSTEM (Ambient Background)
