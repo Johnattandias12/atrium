@@ -336,14 +336,17 @@ create trigger on_auth_user_created
       </div>
     </div>
     <div class="sidebar-spacer"></div>
-    <div onclick="doLogout()" class="sidebar-user" title="Sair da conta">
+    <div class="sidebar-profile" onclick="switchView('settings', document.getElementById('nav-settings'))" title="Meu Perfil">
       <div id="sb-avatar-container"></div>
       <div class="sidebar-user-info">
         <div class="sidebar-user-name truncate" id="sb-name">–</div>
         <div class="sidebar-user-role" id="sb-role">–</div>
       </div>
-      <span class="nav-icon-wrap" style="color:var(--danger);flex-shrink:0"><svg width="14" height="14"><use href="#ic-logout"/></svg></span>
+      <span class="sb-online-dot"></span>
     </div>
+    <button onclick="doLogout()" class="sidebar-logout-btn" title="Sair da conta">
+      <svg width="14" height="14"><use href="#ic-logout"/></svg> Sair
+    </button>
   </aside>
 
   <!-- MAIN -->
@@ -358,7 +361,7 @@ create trigger on_auth_user_created
       <div class="topbar-title" id="topbar-title">Quadro</div>
       <div class="topbar-spacer"></div>
       <!-- Board filters (shown only on board view) -->
-      <div id="board-filters" style="display:flex;align-items:center;gap:8px;">
+      <div id="board-filters" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <div class="search-input">
           <span class="search-icon"><svg width="14" height="14"><use href="#ic-search"/></svg></span>
           <input type="text" placeholder="Buscar demanda…" oninput="onSearch(this.value)" id="search-input">
@@ -373,6 +376,16 @@ create trigger on_auth_user_created
           <option value="media">🟡 Média</option>
           <option value="baixa">🟢 Baixa</option>
         </select>
+        <button class="date-filter-toggle" id="date-filter-toggle" onclick="toggleDateFilter()" title="Filtrar por período">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Período
+        </button>
+        <div class="date-filter-wrap hidden" id="date-filter-wrap">
+          <input type="date" class="filter-date-input" id="filter-date-from" onchange="renderBoard()" title="De">
+          <span style="color:var(--label3);font-size:12px;flex-shrink:0">→</span>
+          <input type="date" class="filter-date-input" id="filter-date-to" onchange="renderBoard()" title="Até">
+          <button class="date-clear-btn" onclick="clearDateFilter()" title="Limpar datas">✕</button>
+        </div>
         <button class="btn btn-primary btn-sm" onclick="openCardDrawer(null, 'todo')">+ Nova demanda</button>
       </div>
     </div>
@@ -424,24 +437,41 @@ create trigger on_auth_user_created
       <!-- PROFILE SECTION -->
       <div class="settings-group">
         <div class="settings-group-title">Meu Perfil</div>
-        <div class="settings-row" style="gap:20px;padding:20px 16px">
-          <div id="profile-avatar-lg-container" onclick="document.getElementById('avatar-color-picker').click()" title="Clique para mudar a cor" style="cursor:pointer;position:relative;">
+        <div class="profile-card">
+          <!-- Avatar Zone — click to upload photo -->
+          <div class="profile-avatar-zone" id="profile-avatar-lg-container" onclick="document.getElementById('p-avatar-file').click()" title="Clique para trocar a foto">
             <!-- Avatar Rendered here -->
+            <div class="profile-avatar-overlay">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </div>
           </div>
+          <input type="file" id="p-avatar-file" style="display:none" accept="image/*" onchange="handleProfilePic(this)">
           <input type="color" id="avatar-color-picker" style="display:none" onchange="saveProfileColor(this.value)">
-          <div style="flex:1">
-            <div style="font-size:18px;font-weight:800;font-family:var(--font-display)" id="profile-display-name">Carregando...</div>
-            <div style="font-size:13px;color:var(--label3);margin-top:2px" id="profile-display-email"></div>
-            <button class="btn btn-xs btn-secondary" style="margin-top:10px" onclick="openProfileEdit()">Editar Perfil</button>
+
+          <!-- Profile Info -->
+          <div class="profile-info">
+            <div class="profile-meta">
+              <div class="profile-name" id="profile-display-name">Carregando...</div>
+              <div class="profile-email" id="profile-display-email"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div class="role-chip" id="profile-role-chip" style="font-size:11px;padding:3px 10px">–</div>
+              <div class="profile-status-badge"><span class="sb-online-dot" style="width:6px;height:6px"></span> Online</div>
+            </div>
+            <div class="profile-actions">
+              <button class="btn btn-sm btn-secondary" onclick="openProfileEdit()">Editar Perfil</button>
+              <button class="btn btn-sm btn-secondary" onclick="document.getElementById('avatar-color-picker').click()" title="Mudar cor do avatar">🎨 Cor</button>
+            </div>
           </div>
         </div>
-        <div id="profile-edit-block" style="display:none;padding:0 16px 20px 16px;animation:fadeDown 0.3s ease;">
-          <div class="grid2" style="margin-bottom:12px; align-items: end;">
+
+        <!-- Edit block -->
+        <div id="profile-edit-block" class="profile-edit-block" style="display:none">
+          <div class="grid2" style="margin-bottom:12px;align-items:end;">
             <div class="field" style="margin:0"><label>Seu Nome</label><input type="text" id="p-name"></div>
             <div class="field" style="margin:0">
               <label>Foto do Perfil</label>
-              <button class="btn btn-sm btn-secondary btn-full" onclick="document.getElementById('p-avatar-file').click()">Subir do PC</button>
-              <input type="file" id="p-avatar-file" style="display:none" accept="image/*" onchange="handleProfilePic(this)">
+              <button class="btn btn-sm btn-secondary btn-full" onclick="document.getElementById('p-avatar-file').click()">📷 Subir do PC</button>
             </div>
           </div>
           <div style="display:flex;gap:10px">
@@ -708,6 +738,8 @@ let S = {
   search: '',
   filterUser: '',
   filterUrgency: '',
+  filterDateFrom: '',
+  filterDateTo: '',
 };
 
 const COLS = [
@@ -819,7 +851,7 @@ async function doRegister() {
 
 async function doLogout() {
   await db.auth.signOut();
-  S = { session:null, me:null, profiles:[], cards:[], cardComments:[], editingCardId:null, view:'board', search:'', filterUser:'', filterUrgency:'' };
+  S = { session:null, me:null, profiles:[], cards:[], cardComments:[], editingCardId:null, view:'board', search:'', filterUser:'', filterUrgency:'', filterDateFrom:'', filterDateTo:'' };
   showScreen('auth');
 }
 
@@ -1013,13 +1045,19 @@ function onSearch(v) { clearTimeout(searchTimer); searchTimer = setTimeout(() =>
 function filteredCards(colId) {
   const fu = document.getElementById('filter-user')?.value || '';
   const fg = document.getElementById('filter-urgency')?.value || '';
-  
+  const df = document.getElementById('filter-date-from')?.value || '';
+  const dt = document.getElementById('filter-date-to')?.value || '';
+
   // Sort cards by their position (if available) or fallback to created_at
   let list = S.cards.filter(c => {
     if (c.status !== colId) return false;
     if (fu && c.assignee_id !== fu) return false;
     if (fg && c.urgency !== fg) return false;
     if (S.search && !c.title.toLowerCase().includes(S.search) && !(c.description||'').toLowerCase().includes(S.search)) return false;
+    // Date range filter: uses deadline if set, falls back to created_at
+    const cardDate = c.deadline || (c.created_at ? c.created_at.slice(0,10) : '');
+    if (df && cardDate && cardDate < df) return false;
+    if (dt && cardDate && cardDate > dt) return false;
     return true;
   });
   
@@ -1136,7 +1174,7 @@ function updateTicker() {
     let msg = `✨ ATENÇÃO: ${critical} DEMANDA${critical!==1?'S':''} CRÍTICA${critical!==1?'S':''} ATIVA${critical!==1?'S':''} • `;
     msg += `🚀 ${done} DEMANDAS CONCLUÍDAS COM SUCESSO • `;
     msg += `💡 DICA: MANTENHA SUAS DEMANDAS ATUALIZADAS E UTILIZE A IA PARA GERAR INSIGHTS RÁPIDOS • `;
-    ticker.textContent = msg + msg + msg; // Repeat to make it long enough
+    ticker.textContent = msg + msg; // Exactly 2× for seamless loop (CSS translateX(-50%))
   }
 }
 
@@ -1395,11 +1433,33 @@ function renderSidebar() {
   if (!S.me) return;
   const avContainer = document.getElementById('sb-avatar-container');
   if (avContainer) avContainer.innerHTML = renderAvatarHtml(S.me, 'av-md');
-  
+
   const nameEl = document.getElementById('sb-name');
   const roleEl = document.getElementById('sb-role');
   if (nameEl) nameEl.textContent = S.me.name?.split(' ').slice(0,2).join(' ') || 'Usuário';
   if (roleEl) roleEl.textContent = ROLE_LABELS[S.me.role] || S.me.role || 'Membro';
+}
+
+/* ─── Date filter helpers ─── */
+function toggleDateFilter() {
+  const wrap = document.getElementById('date-filter-wrap');
+  const btn  = document.getElementById('date-filter-toggle');
+  if (!wrap) return;
+  const isOpen = !wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden', isOpen);
+  if (btn) btn.classList.toggle('active', !isOpen);
+  if (!isOpen) {
+    // Panel just closed — clear values and re-render
+    clearDateFilter();
+  }
+}
+
+function clearDateFilter() {
+  const df = document.getElementById('filter-date-from');
+  const dt = document.getElementById('filter-date-to');
+  if (df) df.value = '';
+  if (dt) dt.value = '';
+  renderBoard();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1657,12 +1717,22 @@ function resetAndReload() {
 function renderSettingsProfile() {
   if (!S.me) return;
   const avContainer = document.getElementById('profile-avatar-lg-container');
-  if (avContainer) avContainer.innerHTML = renderAvatarHtml(S.me, 'av-xl');
-  
+  if (avContainer) {
+    // Preserve the overlay element while replacing avatar
+    avContainer.innerHTML = renderAvatarHtml(S.me, 'av-xl') +
+      `<div class="profile-avatar-overlay"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>`;
+  }
+
   const nameEl  = document.getElementById('profile-display-name');
   const emailEl = document.getElementById('profile-display-email');
+  const chipEl  = document.getElementById('profile-role-chip');
   if (nameEl)   nameEl.textContent = S.me.name || 'Usuário';
   if (emailEl)  emailEl.textContent = S.session?.user?.email || '';
+  if (chipEl) {
+    chipEl.textContent = ROLE_LABELS[S.me.role] || S.me.role || 'Membro';
+    chipEl.className = `role-chip r-${S.me.role}`;
+    chipEl.style.cssText = 'font-size:11px;padding:3px 10px';
+  }
   updateThemeButtons();
 }
 
@@ -1678,11 +1748,18 @@ async function handleProfilePic(input) {
   const file = input.files[0];
   if (!file) return;
   if (file.size > 2 * 1024 * 1024) { showNotif('⚠️ Imagem muito grande (máx 2MB)'); return; }
-  
+
   const reader = new FileReader();
   reader.onload = async (e) => {
     const base64 = e.target.result;
-    document.getElementById('profile-avatar-lg-container').innerHTML = `<div class="avatar av-xl" style="background-image:url('${base64}')"></div>`;
+    const avContainer = document.getElementById('profile-avatar-lg-container');
+    if (avContainer) {
+      avContainer.innerHTML = `<div class="avatar av-xl" style="background-image:url('${base64}');background-color:transparent;background-size:cover;background-position:center"></div>` +
+        `<div class="profile-avatar-overlay"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>`;
+    }
+    // Also update sidebar preview
+    const sbAv = document.getElementById('sb-avatar-container');
+    if (sbAv) sbAv.innerHTML = `<div class="avatar av-md" style="background-image:url('${base64}');background-color:transparent;background-size:cover;background-position:center"></div>`;
     S.me.avatar_url = base64; // Guardamos temporariamente
     showNotif('📸 Foto selecionada! Clique em Salvar.');
   };
