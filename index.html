@@ -337,7 +337,7 @@ create trigger on_auth_user_created
     </div>
     <div class="sidebar-spacer"></div>
     <div onclick="doLogout()" class="sidebar-user" title="Sair da conta">
-      <div class="avatar av-md" id="sb-avatar" style="background:#007AFF"></div>
+      <div id="sb-avatar-container"></div>
       <div class="sidebar-user-info">
         <div class="sidebar-user-name truncate" id="sb-name">–</div>
         <div class="sidebar-user-role" id="sb-role">–</div>
@@ -410,30 +410,24 @@ create trigger on_auth_user_created
       <div class="settings-group">
         <div class="settings-group-title">Meu Perfil</div>
         <div class="settings-row" style="gap:20px;padding:20px 16px">
-          <div id="profile-avatar-lg" style="width:64px;height:64px;border-radius:50%;background:#007AFF;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:#fff;flex-shrink:0;cursor:pointer;position:relative;" onclick="document.getElementById('avatar-color-picker').click()" title="Clique para mudar a cor">
-            <div id="profile-av-initials" style="pointer-events:none">?</div>
-            <div style="position:absolute;bottom:0;right:0;width:20px;height:20px;background:var(--accent);border-radius:50%;border:2px solid var(--bg);display:flex;align-items:center;justify-content:center;font-size:10px;">✏️</div>
+          <div id="profile-avatar-lg-container" onclick="document.getElementById('avatar-color-picker').click()" title="Clique para mudar a cor" style="cursor:pointer;position:relative;">
+            <!-- Avatar Rendered here -->
           </div>
           <input type="color" id="avatar-color-picker" style="display:none" onchange="saveProfileColor(this.value)">
           <div style="flex:1">
-            <div style="font-size:16px;font-weight:700" id="profile-display-name">Carregando...</div>
+            <div style="font-size:18px;font-weight:800;font-family:var(--font-display)" id="profile-display-name">Carregando...</div>
             <div style="font-size:13px;color:var(--label3);margin-top:2px" id="profile-display-email"></div>
-            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-secondary btn-sm" onclick="openProfileEdit()">Editar perfil</button>
-              <button class="btn btn-danger-soft btn-sm" onclick="doLogout()">Sair da conta</button>
-            </div>
+            <button class="btn btn-xs btn-secondary" style="margin-top:10px" onclick="openProfileEdit()">Editar Perfil</button>
           </div>
         </div>
-      </div>
-
-      <!-- EDIT PROFILE MODAL INLINE -->
-      <div id="profile-edit-block" style="display:none" class="settings-group">
-        <div class="settings-group-title">Editar Informações</div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
-          <div class="field" style="margin:0"><label>Nome</label><input type="text" id="p-name" placeholder="Seu nome"></div>
-          <div style="display:flex;gap:10px;margin-top:4px">
-            <button class="btn btn-secondary flex-1" onclick="document.getElementById('profile-edit-block').style.display='none'">Cancelar</button>
-            <button class="btn btn-primary flex-1" onclick="saveProfileName()">Salvar</button>
+        <div id="profile-edit-block" style="display:none;padding:0 16px 20px 16px;animation:fadeDown 0.3s ease;">
+          <div class="grid2" style="margin-bottom:12px">
+            <div class="field" style="margin:0"><label>Seu Nome</label><input type="text" id="p-name"></div>
+            <div class="field" style="margin:0"><label>Foto (URL)</label><input type="text" id="p-avatar" placeholder="https://..."></div>
+          </div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-sm btn-secondary flex-1" onclick="document.getElementById('profile-edit-block').style.display='none'">Cancelar</button>
+            <button class="btn btn-sm btn-primary flex-1" onclick="saveProfile()">Salvar Alterações</button>
           </div>
         </div>
       </div>
@@ -562,7 +556,7 @@ create trigger on_auth_user_created
         <div class="section-head">Comentários <span id="comments-count" style="font-weight:400;color:var(--label3);text-transform:none;font-size:12px"></span></div>
         <div id="comments-list"></div>
         <div class="comment-compose">
-          <div class="avatar av-sm" id="compose-avatar" style="background:#007AFF;flex-shrink:0">?</div>
+          <div id="compose-avatar-container"></div>
           <textarea id="comment-input" placeholder="Adicionar comentário… (Ctrl+Enter para enviar)" rows="2" style="flex:1;padding:8px 11px;font-size:13px;border-radius:var(--radius-sm);border:1px solid var(--separator);font-family:var(--font);outline:none;resize:none;background:var(--input-bg);color:var(--label)" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();addComment();}"></textarea>
           <button class="btn btn-primary btn-sm" onclick="addComment()" style="flex-shrink:0">Enviar</button>
         </div>
@@ -746,6 +740,8 @@ async function doLogin() {
   const { data, error } = await db.auth.signInWithPassword({ email, password: pass });
   setBtnLoading('login-btn', false);
   if (error) { showNotif('❌ ' + (error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message)); return; }
+  
+  localStorage.setItem('atrium_remember_email', email);
   S.session = data.session;
   await bootApp();
 }
@@ -1056,6 +1052,15 @@ function updateTicker() {
   }
 }
 
+function renderAvatarHtml(p, sizeClass = 'av-md') {
+  if (!p) return `<div class="avatar ${sizeClass}" style="background:var(--fill2)">?</div>`;
+  const style = p.avatar_url 
+    ? `background-image: url('${esc(p.avatar_url)}'); background-color: transparent;` 
+    : `background-color: ${safeColor(p.color)}`;
+  const content = p.avatar_url ? '' : esc(initials(p.name));
+  return `<div class="avatar ${sizeClass}" style="${style}">${content}</div>`;
+}
+
 function renderCardHtml(c, index) {
   const today = todayStr();
   const soon3 = new Date(); soon3.setDate(soon3.getDate()+3);
@@ -1081,8 +1086,8 @@ function renderCardHtml(c, index) {
       ${c.description ? `<div class="card-desc">${esc(c.description)}</div>` : ''}
       <div class="card-footer">
         ${a
-          ? `<div class="card-assignee"><div class="avatar av-sm" style="background:${safeColor(a.color)}">${esc(initials(a.name))}</div><span class="truncate">${esc(a.name.split(' ')[0])}</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Remover…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}" ${p.id===a.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`
-          : `<div class="card-assignee" style="opacity:0.5"><div class="avatar av-sm" style="background:var(--fill2)">?</div><span class="truncate">Sem dono</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Atribuir…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>`
+          ? `<div class="card-assignee">${renderAvatarHtml(a, 'av-sm')}<span class="truncate">${esc(a.name.split(' ')[0])}</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Remover…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}" ${p.id===a.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`
+          : `<div class="card-assignee" style="opacity:0.5">${renderAvatarHtml(null, 'av-sm')}<span class="truncate">Sem dono</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Atribuir…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>`
         }
         ${c.deadline ? `<div class="card-date ${dateClass}">${calIcon} ${fmtDate(c.deadline)}</div>` : ''}
       </div>
@@ -1300,11 +1305,9 @@ async function saveMember() {
 ═══════════════════════════════════════════════════════ */
 function renderSidebar() {
   if (!S.me) return;
-  const av = document.getElementById('sb-avatar');
-  if (av) {
-    av.textContent = initials(S.me.name);
-    av.style.background = S.me.color || '#007AFF';
-  }
+  const avContainer = document.getElementById('sb-avatar-container');
+  if (avContainer) avContainer.innerHTML = renderAvatarHtml(S.me, 'av-md');
+  
   const nameEl = document.getElementById('sb-name');
   const roleEl = document.getElementById('sb-role');
   if (nameEl) nameEl.textContent = S.me.name?.split(' ').slice(0,2).join(' ') || 'Usuário';
@@ -1467,6 +1470,15 @@ function showErrorScreen(icon, title, desc, buttons) {
 
 async function init() {
   loadConfig();
+  
+  // Pre-fill email if remembered
+  try {
+    const savedEmail = localStorage.getItem('atrium_remember_email');
+    if (savedEmail) {
+      const lEmail = document.getElementById('l-email');
+      if (lEmail) lEmail.value = savedEmail;
+    }
+  } catch(e) {}
 
   // Supabase library not loaded yet? Wait a tick and retry once.
   if (!window.supabase || typeof window.supabase.createClient !== 'function') {
@@ -1556,36 +1568,42 @@ function resetAndReload() {
 ═══════════════════════════════════════════════════════ */
 function renderSettingsProfile() {
   if (!S.me) return;
-  const avEl  = document.getElementById('profile-avatar-lg');
-  const initEl = document.getElementById('profile-av-initials');
-  const nameEl = document.getElementById('profile-display-name');
+  const avContainer = document.getElementById('profile-avatar-lg-container');
+  if (avContainer) avContainer.innerHTML = renderAvatarHtml(S.me, 'av-xl');
+  
+  const nameEl  = document.getElementById('profile-display-name');
   const emailEl = document.getElementById('profile-display-email');
-  if (avEl)   avEl.style.background = S.me.color || '#007AFF';
-  if (initEl) initEl.textContent = initials(S.me.name);
-  if (nameEl) nameEl.textContent = S.me.name || 'Usuário';
-  if (emailEl) emailEl.textContent = S.session?.user?.email || '';
+  if (nameEl)   nameEl.textContent = S.me.name || 'Usuário';
+  if (emailEl)  emailEl.textContent = S.session?.user?.email || '';
   updateThemeButtons();
 }
 
 function openProfileEdit() {
   const block = document.getElementById('profile-edit-block');
   const inp   = document.getElementById('p-name');
+  const avInp = document.getElementById('p-avatar');
   if (!block) return;
-  if (inp) inp.value = S.me?.name || '';
+  if (inp)   inp.value = S.me?.name || '';
+  if (avInp) avInp.value = S.me?.avatar_url || '';
   block.style.display = block.style.display === 'none' ? 'block' : 'none';
 }
 
-async function saveProfileName() {
+async function saveProfile() {
   const name = document.getElementById('p-name')?.value?.trim();
+  const avatar_url = document.getElementById('p-avatar')?.value?.trim();
   if (!name) { showNotif('⚠️ Nome não pode ser vazio.'); return; }
-  const { error } = await db.from('profiles').update({ name }).eq('id', S.me.id);
+  
+  const { error } = await db.from('profiles').update({ name, avatar_url }).eq('id', S.me.id);
   if (error) { showNotif('❌ Erro ao salvar: ' + error.message); return; }
+  
   S.me.name = name;
+  S.me.avatar_url = avatar_url;
   const mp = S.profiles.find(p => p.id === S.me.id);
-  if (mp) mp.name = name;
+  if (mp) { mp.name = name; mp.avatar_url = avatar_url; }
+  
   renderSidebar(); renderSettingsProfile();
   document.getElementById('profile-edit-block').style.display = 'none';
-  showNotif('✅ Nome atualizado!');
+  showNotif('✅ Perfil atualizado!');
 }
 
 async function saveProfileColor(color) {
@@ -1594,9 +1612,8 @@ async function saveProfileColor(color) {
   S.me.color = color;
   const mp = S.profiles.find(p => p.id === S.me.id);
   if (mp) mp.color = color;
-  const avEl  = document.getElementById('profile-avatar-lg');
-  if (avEl) avEl.style.background = color;
   renderSidebar();
+  renderSettingsProfile();
   showNotif('✅ Cor atualizada!');
 }
 
