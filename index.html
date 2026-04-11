@@ -58,8 +58,8 @@
 
 /* ── LIGHT THEME (Premium Brand Colors) ── */
 :root[data-theme="light"] {
-  --bg:        #EBF2FA; /* Off-white with slight blue tint */
-  --bg2:       #E2ECF6;
+  --bg:        #E6F0FA; /* Softer pastel blue */
+  --bg2:       #D9E8F8;
   --surface:   rgba(255,255,255,0.85); /* Glass over light bg */
   --surface2:  rgba(242,246,252,0.95);
   --surface3:  #D0E0F0;
@@ -113,6 +113,8 @@ body {
 .dynamic-bg::after {
   width: 50vw; height: 50vw; background: rgba(191, 90, 242, 0.12); bottom: -10vh; right: -10vw; animation-delay: -12s;
 }
+:root[data-theme="light"] .dynamic-bg::before { background: rgba(10, 132, 255, 0.25); filter: blur(100px); }
+:root[data-theme="light"] .dynamic-bg::after { background: rgba(90, 200, 250, 0.3); filter: blur(120px); }
 @keyframes floatOrb {
   0% { transform: translate(0,0) scale(1); }
   100% { transform: translate(10vw, 10vh) scale(1.15); }
@@ -263,21 +265,22 @@ body {
   margin-bottom: 6px; text-transform: uppercase;
 }
 .field input, .field select, .field textarea {
-  width: 100%; padding: 10px 14px;
-  background: var(--surface); border: 1px solid var(--separator);
+  width: 100%; padding: 12px 16px;
+  background: var(--surface); border: 1.5px solid var(--separator);
   border-radius: var(--radius-sm); color: var(--label);
-  font-family: var(--font); font-size: 15px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  font-family: var(--font); font-size: 15px; font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   outline: none; appearance: none;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.02);
 }
 .field input:focus, .field select:focus, .field textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(0,122,255,0.15);
+  border-color: var(--accent); background: var(--bg2);
+  box-shadow: 0 0 0 4px rgba(10,132,255,0.15); transform: translateY(-1px);
 }
-.field input::placeholder, .field textarea::placeholder { color: var(--label3); }
-.field select { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%238E8E93' stroke-width='1.5' d='M1 1l5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
-.field select option { background: var(--surface2); color: var(--label); }
-select option { background: var(--surface2); color: var(--label); }
+.field input::placeholder, .field textarea::placeholder { color: var(--label3); font-weight: 400; }
+.field select { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10' viewBox='0 0 14 10'%3E%3Cpath fill='none' stroke='%230A84FF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M1 1l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
+.field select option { background: #1c1c1e; color: #fff; }
+:root[data-theme="light"] .field select option { background: #fff; color: #000; }
 .field textarea { resize: vertical; min-height: 80px; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -610,9 +613,15 @@ select option { background: var(--surface2); color: var(--label); }
 .card.status-done .card-title { color: var(--success); }
 .card.status-done .card-urgency-bar { background: var(--success) !important; }
 .card-urgency-bar {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
 }
-.card-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.card-priority-num {
+  position: absolute; right: 12px; top: -2px; z-index: 0;
+  font-family: var(--font-display); font-size: 42px; font-weight: 800;
+  color: var(--label4); opacity: 0.15; pointer-events: none;
+  letter-spacing: -2px;
+}
+.card-head { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; position:relative; z-index:1; }
 .card-title { font-size: 14px; font-weight: 600; line-height: 1.4; flex: 1; }
 .urgency-pill {
   font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
@@ -1718,7 +1727,7 @@ function renderBoard() {
       </div>
       <div class="col-body" data-col="${col.id}" id="col-${col.id}">
         ${cards.length
-          ? cards.map(renderCardHtml).join('')
+          ? cards.map((c, i) => renderCardHtml(c, i)).join('')
           : `<div class="empty-col"><div class="empty-col-icon">📋</div><div class="empty-col-text">Vazio</div></div>`}
       </div>
       <button class="col-add" onclick="openCardDrawer(null,'${col.id}')">
@@ -1790,9 +1799,26 @@ function renderBoard() {
     });
   });
   renderStats();
+  updateTicker(); // Also update the carousel
 }
 
-function renderCardHtml(c) {
+function updateTicker() {
+  const ticker = document.querySelector('.ticker-content');
+  if (!ticker) return;
+  const critical = S.cards.filter(c => c.urgency === 'critica' && c.status !== 'done').length;
+  const done = S.cards.filter(c => c.status === 'done').length;
+  
+  if (S.cards.length === 0) {
+    ticker.textContent = "💡 BEM-VINDO AO ATRIUM! CLIQUE EM 'NOVA DEMANDA' PARA COMEÇAR A ORGANIZAR SEU DIA • UTILIZE A INTELIGÊNCIA ARTIFICIAL PARA OTIMIZAR SUAS TAREFAS • DEFINA URGÊNCIAS E OTIMIZE A GESTÃO DA SUA EQUIPE • ";
+  } else {
+    let msg = `✨ ATENÇÃO: ${critical} DEMANDA${critical!==1?'S':''} CRÍTICA${critical!==1?'S':''} ATIVA${critical!==1?'S':''} • `;
+    msg += `🚀 ${done} DEMANDAS CONCLUÍDAS COM SUCESSO • `;
+    msg += `💡 DICA: MANTENHA SUAS DEMANDAS ATUALIZADAS E UTILIZE A IA PARA GERAR INSIGHTS RÁPIDOS • `;
+    ticker.textContent = msg + msg + msg; // Repeat to make it long enough
+  }
+}
+
+function renderCardHtml(c, index) {
   const today = todayStr();
   const soon3 = new Date(); soon3.setDate(soon3.getDate()+3);
   const soonStr = soon3.toISOString().slice(0,10);
@@ -1804,6 +1830,7 @@ function renderCardHtml(c) {
   return `
   <div class="card status-${c.status}" data-id="${c.id}">
     <div class="card-urgency-bar ${isDone ? '' : 'ub-'+c.urgency}" style="${isDone?'background:var(--success)':''}"></div>
+    ${!isDone ? `<div class="card-priority-num">#${index + 1}</div>` : ''}
     <div style="padding-left:8px">
       <div class="card-head">
         <div class="card-title">${isDone ? '✓ ' : ''}${esc(c.title)}</div>
