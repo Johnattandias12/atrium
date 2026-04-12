@@ -37,9 +37,9 @@
   --shadow:    0 4px 16px rgba(0,0,0,0.4);
   --shadow-md: 0 8px 28px rgba(0,0,0,0.46);
   --shadow-lg: 0 16px 48px rgba(0,0,0,0.58);
-  --glow-todo:   rgba(142,142,147,0.3);
-  --glow-doing:  rgba(10,132,255,0.45);
-  --glow-review: rgba(255,159,10,0.42);
+  --glow-todo:   rgba(255,59,48,0.38);
+  --glow-doing:  rgba(255,214,10,0.38);
+  --glow-review: rgba(10,132,255,0.42);
   --glow-done:   rgba(48,209,88,0.42);
 }
 
@@ -64,9 +64,9 @@
   --shadow:    0 4px 18px rgba(0,0,0,0.11);
   --shadow-md: 0 8px 28px rgba(0,0,0,0.13);
   --shadow-lg: 0 16px 48px rgba(0,0,0,0.15);
-  --glow-todo:   rgba(100,110,130,0.14);
-  --glow-doing:  rgba(0,98,255,0.18);
-  --glow-review: rgba(217,119,6,0.18);
+  --glow-todo:   rgba(220,38,38,0.14);
+  --glow-doing:  rgba(202,168,0,0.18);
+  --glow-review: rgba(0,98,255,0.18);
   --glow-done:   rgba(5,150,105,0.18);
 }
 
@@ -754,14 +754,14 @@ input[type="date"] { color-scheme: dark; }
 .card.sortable-ghost { opacity:0.08; }
 .card.is-dragging    { opacity:0.45; cursor:grabbing; }
 
-/* Status left border */
-.card.status-todo   { border-left:3px solid rgba(142,142,147,0.38); }
-.card.status-doing  { border-left:3px solid rgba(10,132,255,0.6); }
-.card.status-review { border-left:3px solid rgba(255,159,10,0.6); }
+/* Status left border — cores alinhadas com COLS */
+.card.status-todo   { border-left:3px solid rgba(255,59,48,0.55); }
+.card.status-doing  { border-left:3px solid rgba(255,214,10,0.65); }
+.card.status-review { border-left:3px solid rgba(10,132,255,0.6); }
 .card.status-done   { border-left:3px solid rgba(48,209,88,0.6); }
-:root[data-theme="light"] .card.status-todo   { border-left-color:rgba(100,110,130,0.35); }
-:root[data-theme="light"] .card.status-doing  { border-left-color:rgba(0,98,255,0.55); }
-:root[data-theme="light"] .card.status-review { border-left-color:rgba(217,119,6,0.55); }
+:root[data-theme="light"] .card.status-todo   { border-left-color:rgba(220,38,38,0.45); }
+:root[data-theme="light"] .card.status-doing  { border-left-color:rgba(180,140,0,0.55); }
+:root[data-theme="light"] .card.status-review { border-left-color:rgba(0,98,255,0.55); }
 :root[data-theme="light"] .card.status-done   { border-left-color:rgba(5,150,105,0.6); }
 
 /* Overdue: pulsing border */
