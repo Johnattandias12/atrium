@@ -484,9 +484,17 @@ create trigger on_auth_user_created
           <div class="grid2" style="margin-bottom:12px;align-items:end;">
             <div class="field" style="margin:0"><label>Seu Nome</label><input type="text" id="p-name"></div>
             <div class="field" style="margin:0">
-              <label>Foto do Perfil</label>
-              <button class="btn btn-sm btn-secondary btn-full" onclick="document.getElementById('p-avatar-file').click()">📷 Subir do PC</button>
+              <label>Cargo</label>
+              <select id="p-role" class="select">
+                <option value="corretor">Corretor</option>
+                <option value="gerente">Gerente</option>
+                <option value="admin">Administrador</option>
+              </select>
             </div>
+          </div>
+          <div class="field" style="margin-bottom:12px">
+            <label>Foto do Perfil</label>
+            <button class="btn btn-sm btn-secondary btn-full" id="btn-upload-avatar" type="button">📷 Subir do PC</button>
           </div>
           <div style="display:flex;gap:10px">
             <button class="btn btn-sm btn-secondary flex-1" onclick="document.getElementById('profile-edit-block').style.display='none'">Cancelar</button>
@@ -889,6 +897,7 @@ async function bootApp() {
     renderBoard();
     renderStats();
     renderSettingsProfile();
+    _wireAvatarInput();
     if (document.getElementById('ai-key-input')) document.getElementById('ai-key-input').value = cfg.anthropicKey || '';
     showScreen('app');
     switchView('board', document.getElementById('nav-board'));
@@ -975,19 +984,21 @@ function getSelectedCoAssignees() {
   return Array.from(_coSelected);
 }
 
-/* ─── Avatar localStorage helpers (works even without avatar_url column in DB) ─── */
-function _saveLocalAvatar(userId, base64) {
-  try { localStorage.setItem('atrium_av_' + userId, base64); } catch(e) {}
+/* ─── Avatar localStorage helpers ─── */
+function _saveLocalAvatar(userId, dataUrlOrPublicUrl) {
+  if (!userId || !dataUrlOrPublicUrl) return;
+  try { localStorage.setItem('atrium_av_' + userId, dataUrlOrPublicUrl); } catch(e) {}
 }
 function _loadLocalAvatar(userId) {
+  if (!userId) return null;
   try { return localStorage.getItem('atrium_av_' + userId) || null; } catch(e) { return null; }
 }
+/* Sempre prefere localStorage (mais fresco) sobre o DB */
 function _mergeLocalAvatars(profileList) {
   profileList.forEach(p => {
-    if (p && !p.avatar_url) {
-      const local = _loadLocalAvatar(p.id);
-      if (local) p.avatar_url = local;
-    }
+    if (!p) return;
+    const local = _loadLocalAvatar(p.id);
+    if (local) p.avatar_url = local; // sobrescreve DB se tiver local
   });
 }
 
@@ -995,11 +1006,33 @@ async function loadCurrentUser() {
   if (!S.session) return;
   const { data } = await db.from('profiles').select('*').eq('id', S.session.user.id).single();
   S.me = data;
-  // Merge locally-stored avatar (works even if DB column doesn't exist)
-  if (S.me && !S.me.avatar_url) {
+  // Sempre prefere avatar local (mais atualizado que o DB)
+  if (S.me) {
     const local = _loadLocalAvatar(S.me.id);
     if (local) S.me.avatar_url = local;
   }
+}
+
+/* Aplica o avatar em todos os pontos do DOM */
+function _applyAvatarToDOM(src) {
+  if (!src) return;
+  const style = `background-image:url('${src}');background-color:transparent;background-size:cover;background-position:center`;
+  // Sidebar
+  const sbAv = document.getElementById('sb-avatar-container');
+  if (sbAv) sbAv.innerHTML = `<div class="avatar av-md" style="${style}"></div>`;
+  // Settings profile
+  const avContainer = document.getElementById('profile-avatar-lg-container');
+  if (avContainer) {
+    avContainer.innerHTML = `<div class="avatar av-xl" style="${style}"></div>` +
+      `<div class="profile-avatar-overlay"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>`;
+  }
+  // Welcome ring
+  const ring = document.getElementById('welcome-ring');
+  if (ring) { ring.style.backgroundImage = `url('${src}')`; ring.style.backgroundSize = 'cover'; }
+  // State
+  if (S.me) S.me.avatar_url = src;
+  const mp = S.profiles.find(p => p.id === S.me?.id);
+  if (mp) mp.avatar_url = src;
 }
 
 /* ── THEME MANAGER ── */
@@ -1895,11 +1928,16 @@ function resetAndReload() {
 ═══════════════════════════════════════════════════════ */
 function renderSettingsProfile() {
   if (!S.me) return;
+
+  // Prefere localStorage como fonte de verdade do avatar
+  const localAv = _loadLocalAvatar(S.me.id);
+  if (localAv && localAv !== S.me.avatar_url) S.me.avatar_url = localAv;
+
   const avContainer = document.getElementById('profile-avatar-lg-container');
   if (avContainer) {
-    // Preserve the overlay element while replacing avatar
     avContainer.innerHTML = renderAvatarHtml(S.me, 'av-xl') +
       `<div class="profile-avatar-overlay"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>`;
+    avContainer.onclick = function() { document.getElementById('p-avatar-file')?.click(); };
   }
 
   const nameEl  = document.getElementById('profile-display-name');
@@ -1913,17 +1951,20 @@ function renderSettingsProfile() {
     chipEl.style.cssText = 'font-size:11px;padding:3px 10px';
   }
   updateThemeButtons();
+  _wireAvatarInput();
 }
 
 function openProfileEdit() {
   const block = document.getElementById('profile-edit-block');
-  const inp   = document.getElementById('p-name');
   if (!block) return;
-  if (inp)   inp.value = S.me?.name || '';
+  const inp  = document.getElementById('p-name');
+  const sel  = document.getElementById('p-role');
+  if (inp) inp.value = S.me?.name || '';
+  if (sel) sel.value = S.me?.role || 'corretor';
   block.style.display = block.style.display === 'none' ? 'block' : 'none';
+  _wireAvatarInput(); // garante que o file input está ligado
 }
 
-/* Resize imagem para 200×200 via Canvas e retorna WebP base64 */
 /* Converte data URL → Blob de forma confiável (sem fetch) */
 function _dataURLtoBlob(dataURL) {
   const [header, data] = dataURL.split(',');
@@ -1932,6 +1973,27 @@ function _dataURLtoBlob(dataURL) {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return new Blob([bytes], { type: mime });
+}
+
+/* Liga o file input ao handler via JS (mais confiável que inline onchange) */
+function _wireAvatarInput() {
+  const input = document.getElementById('p-avatar-file');
+  const btn   = document.getElementById('btn-upload-avatar');
+  if (!input) return;
+  // Remove listeners antigos clonando o elemento
+  const newInput = input.cloneNode(true);
+  input.parentNode.replaceChild(newInput, input);
+  newInput.addEventListener('change', function() { handleProfilePic(this); });
+  if (btn) {
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.addEventListener('click', function(e) { e.preventDefault(); newInput.click(); });
+  }
+  // Avatar zone também
+  const zone = document.getElementById('profile-avatar-lg-container');
+  if (zone) {
+    zone.onclick = function() { newInput.click(); };
+  }
 }
 
 function _resizeImageCanvas(file) {
@@ -1962,132 +2024,88 @@ function _resizeImageCanvas(file) {
 }
 
 /* Atualiza todas as "bolinhas" de avatar no DOM em tempo real */
-function _syncAvatarEverywhere(base64OrUrl) {
-  const style = `background-image:url('${base64OrUrl}');background-color:transparent;background-size:cover;background-position:center`;
-  const overlayHtml = `<div class="profile-avatar-overlay"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>`;
-  const avContainer = document.getElementById('profile-avatar-lg-container');
-  if (avContainer) avContainer.innerHTML = `<div class="avatar av-xl" style="${style}"></div>${overlayHtml}`;
-  const sbAv = document.getElementById('sb-avatar-container');
-  if (sbAv) sbAv.innerHTML = `<div class="avatar av-md" style="${style}"></div>`;
-  if (S.me) S.me.avatar_url = base64OrUrl;
-  const mp = S.profiles.find(p => p.id === S.me?.id);
-  if (mp) mp.avatar_url = base64OrUrl;
-}
+
 
 async function handleProfilePic(input) {
-  const file = input.files[0];
+  const file = input?.files?.[0];
   if (!file) return;
   showNotif('⏳ Processando imagem…');
 
+  // 1. Redimensiona para 200x200 via Canvas
   let base64;
-  try {
-    base64 = await _resizeImageCanvas(file);
-  } catch(e) {
-    console.error('[avatar] resize error:', e);
-    showNotif('❌ Erro ao processar imagem.'); return;
-  }
+  try { base64 = await _resizeImageCanvas(file); }
+  catch(e) { showNotif('❌ Erro ao processar imagem.'); return; }
 
-  // Atualiza UI imediatamente (preview instantâneo)
-  _syncAvatarEverywhere(base64);
+  // 2. Salva no localStorage IMEDIATAMENTE — persiste mesmo sem DB
+  if (S.me?.id) _saveLocalAvatar(S.me.id, base64);
 
-  // Tentar upload para Supabase Storage (bucket: avatars)
-  let publicUrl = null;
+  // 3. Atualiza TODA a UI instantaneamente
+  _applyAvatarToDOM(base64);
+  renderBoard(); // atualiza bolinhas nos cards
+
+  showNotif('✅ Foto atualizada!');
+
+  // 4. Upload para Supabase Storage em background (melhora a URL pública)
   if (db && S.me?.id) {
     try {
-      const blob = _dataURLtoBlob(base64); // confiável — sem fetch()
-      const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
+      const blob = _dataURLtoBlob(base64);
+      const ext  = blob.type === 'image/webp' ? 'webp' : 'jpg';
       const fileName = `${S.me.id}/avatar.${ext}`;
       const { error: upErr } = await db.storage
         .from('avatars')
         .upload(fileName, blob, { contentType: blob.type, upsert: true });
-      if (upErr) {
-        console.error('[avatar] storage upload error:', upErr.message);
-      } else {
+      if (!upErr) {
         const { data: urlData } = db.storage.from('avatars').getPublicUrl(fileName);
-        publicUrl = urlData?.publicUrl ? urlData.publicUrl + '?t=' + Date.now() : null;
-        if (publicUrl) _syncAvatarEverywhere(publicUrl);
+        const publicUrl = urlData?.publicUrl ? urlData.publicUrl + '?t=' + Date.now() : null;
+        if (publicUrl) {
+          _saveLocalAvatar(S.me.id, publicUrl);
+          _applyAvatarToDOM(publicUrl);
+        }
       }
-    } catch(e) {
-      console.error('[avatar] storage exception:', e);
-    }
-  }
+    } catch(e) { /* Storage indisponível — base64 local é suficiente */ }
 
-  const finalUrl = publicUrl || base64;
-
-  // Persiste localmente como fallback garantido
-  if (S.me?.id) _saveLocalAvatar(S.me.id, finalUrl);
-
-  // Auto-salva na DB (usa publicUrl se disponível, senão base64)
-  if (db && S.me?.id) {
-    const { error } = await db.from('profiles').update({ avatar_url: finalUrl }).eq('id', S.me.id);
-    if (!error) {
-      showNotif('✅ Foto salva com sucesso!');
-      renderBoard();
-    } else if (error.message?.toLowerCase().includes('avatar_url') || error.message?.toLowerCase().includes('schema cache')) {
-      showNotif('📸 Foto salva localmente. (coluna avatar_url ausente no banco)');
-      console.error('[avatar] DB missing column:', error.message);
-    } else if (error.code === '54000' || error.message?.toLowerCase().includes('payload too large')) {
-      // base64 muito grande — salva só a publicUrl se tiver
-      if (publicUrl) {
-        await db.from('profiles').update({ avatar_url: publicUrl }).eq('id', S.me.id);
-        showNotif('✅ Foto salva com sucesso!');
-        renderBoard();
-      } else {
-        showNotif('⚠️ Foto salva localmente (imagem grande demais para o banco).');
-      }
-    } else {
-      console.error('[avatar] DB save error:', error.message);
-      showNotif('📸 Foto salva localmente.');
-    }
-  } else {
-    showNotif('📸 Foto salva localmente.');
+    // 5. Salva na DB em background (base64 se não tiver publicUrl)
+    const finalUrl = _loadLocalAvatar(S.me.id) || base64;
+    db.from('profiles').update({ avatar_url: finalUrl }).eq('id', S.me.id).catch(() => {});
   }
 }
 
 async function saveProfile() {
   const name = document.getElementById('p-name')?.value?.trim();
-  const avatar_url = S.me.avatar_url; // nova base64 ou a antiga
+  const role = document.getElementById('p-role')?.value || S.me?.role || 'corretor';
   if (!name) { showNotif('⚠️ Nome não pode ser vazio.'); return; }
 
-  // Always persist avatar locally so it survives even without DB column
-  if (avatar_url && S.me.id) _saveLocalAvatar(S.me.id, avatar_url);
+  // Avatar: localStorage é a fonte da verdade
+  const avatar_url = _loadLocalAvatar(S.me?.id) || S.me?.avatar_url || null;
 
   setBtnLoading('save-profile-btn', true);
 
-  // Try saving with avatar_url first; if DB column doesn't exist, retry name-only
-  let { error } = await db.from('profiles').update({ name, avatar_url }).eq('id', S.me.id);
-  let avatarInDb = true;
+  // Tenta salvar tudo incluindo avatar_url
+  let { error } = await db.from('profiles').update({ name, role, avatar_url }).eq('id', S.me.id);
 
   if (error && (error.message?.toLowerCase().includes('avatar_url') || error.message?.toLowerCase().includes('schema cache'))) {
-    // Column doesn't exist in DB — save only name, photo lives in localStorage
-    avatarInDb = false;
-    const res2 = await db.from('profiles').update({ name }).eq('id', S.me.id);
+    // Coluna avatar_url não existe — salva só nome e cargo
+    const res2 = await db.from('profiles').update({ name, role }).eq('id', S.me.id);
     error = res2.error;
   }
 
   setBtnLoading('save-profile-btn', false);
 
   if (error) {
-    if (error.message?.includes('payload too large')) {
-      showNotif('❌ Foto muito pesada. Tente uma imagem menor (< 500 KB).');
-    } else {
-      showNotif('❌ Erro ao salvar: ' + error.message);
-    }
+    showNotif('❌ Erro ao salvar: ' + error.message);
     return;
   }
 
-  if (!avatarInDb && avatar_url) {
-    showNotif('✅ Nome salvo! Foto guardada localmente.');
-  } else {
-    showNotif('✅ Perfil atualizado!');
-  }
-
+  // Atualiza estado local
   S.me.name = name;
-  S.me.avatar_url = avatar_url;
+  S.me.role = role;
+  if (avatar_url) S.me.avatar_url = avatar_url;
   const mp = S.profiles.find(p => p.id === S.me.id);
-  if (mp) { mp.name = name; mp.avatar_url = avatar_url; }
+  if (mp) { mp.name = name; mp.role = role; if (avatar_url) mp.avatar_url = avatar_url; }
 
-  renderSidebar(); renderSettingsProfile();
+  showNotif('✅ Perfil atualizado!');
+  renderSidebar();
+  renderSettingsProfile();
   document.getElementById('profile-edit-block').style.display = 'none';
 }
 
