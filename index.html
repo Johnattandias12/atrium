@@ -1360,8 +1360,10 @@ function updateTicker() {
 
 function renderAvatarHtml(p, sizeClass = 'av-md') {
   if (!p) return `<div class="avatar ${sizeClass}" style="background:var(--fill2)">?</div>`;
-  const style = p.avatar_url 
-    ? `background-image: url("${p.avatar_url}"); background-color: transparent; background-size: cover; background-position: center;` 
+  // IMPORTANTE: usar aspas simples dentro de url() para não quebrar o atributo HTML
+  // que usa aspas duplas. Base64 data URIs nunca contêm aspas simples, então é seguro.
+  const style = p.avatar_url
+    ? `background-image: url('${p.avatar_url}'); background-color: transparent; background-size: cover; background-position: center;`
     : `background-color: ${safeColor(p.color)}`;
   const content = p.avatar_url ? '' : esc(initials(p.name));
   return `<div class="avatar ${sizeClass}" style="${style}">${content}</div>`;
