@@ -163,11 +163,15 @@ create table if not exists public.cards (
   status text not null default 'todo' check (status in ('todo','doing','review','done')),
   urgency text not null default 'media' check (urgency in ('baixa','media','alta','critica')),
   assignee_id uuid references public.profiles(id) on delete set null,
+  co_assignee_ids uuid[] default '{}',
   deadline date,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- Migrações para tabelas já existentes (seguras para re-executar)
+alter table public.cards add column if not exists co_assignee_ids uuid[] default '{}';
 
 create table if not exists public.comments (
   id uuid default gen_random_uuid() primary key,
@@ -1920,6 +1924,16 @@ function openProfileEdit() {
 }
 
 /* Resize imagem para 200×200 via Canvas e retorna WebP base64 */
+/* Converte data URL → Blob de forma confiável (sem fetch) */
+function _dataURLtoBlob(dataURL) {
+  const [header, data] = dataURL.split(',');
+  const mime = (header.match(/:(.*?);/) || [])[1] || 'image/webp';
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
 function _resizeImageCanvas(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1969,6 +1983,7 @@ async function handleProfilePic(input) {
   try {
     base64 = await _resizeImageCanvas(file);
   } catch(e) {
+    console.error('[avatar] resize error:', e);
     showNotif('❌ Erro ao processar imagem.'); return;
   }
 
@@ -1979,17 +1994,22 @@ async function handleProfilePic(input) {
   let publicUrl = null;
   if (db && S.me?.id) {
     try {
-      const blob = await (await fetch(base64)).blob();
-      const fileName = `${S.me.id}/avatar.webp`;
+      const blob = _dataURLtoBlob(base64); // confiável — sem fetch()
+      const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
+      const fileName = `${S.me.id}/avatar.${ext}`;
       const { error: upErr } = await db.storage
         .from('avatars')
-        .upload(fileName, blob, { contentType: 'image/webp', upsert: true });
-      if (!upErr) {
+        .upload(fileName, blob, { contentType: blob.type, upsert: true });
+      if (upErr) {
+        console.error('[avatar] storage upload error:', upErr.message);
+      } else {
         const { data: urlData } = db.storage.from('avatars').getPublicUrl(fileName);
         publicUrl = urlData?.publicUrl ? urlData.publicUrl + '?t=' + Date.now() : null;
         if (publicUrl) _syncAvatarEverywhere(publicUrl);
       }
-    } catch(e) { /* bucket não existe — fallback para base64 */ }
+    } catch(e) {
+      console.error('[avatar] storage exception:', e);
+    }
   }
 
   const finalUrl = publicUrl || base64;
@@ -1997,19 +2017,28 @@ async function handleProfilePic(input) {
   // Persiste localmente como fallback garantido
   if (S.me?.id) _saveLocalAvatar(S.me.id, finalUrl);
 
-  // Auto-salva na DB imediatamente — não precisa clicar em "Salvar"
+  // Auto-salva na DB (usa publicUrl se disponível, senão base64)
   if (db && S.me?.id) {
-    db.from('profiles').update({ avatar_url: finalUrl }).eq('id', S.me.id).then(({ error }) => {
-      if (!error) {
+    const { error } = await db.from('profiles').update({ avatar_url: finalUrl }).eq('id', S.me.id);
+    if (!error) {
+      showNotif('✅ Foto salva com sucesso!');
+      renderBoard();
+    } else if (error.message?.toLowerCase().includes('avatar_url') || error.message?.toLowerCase().includes('schema cache')) {
+      showNotif('📸 Foto salva localmente. (coluna avatar_url ausente no banco)');
+      console.error('[avatar] DB missing column:', error.message);
+    } else if (error.code === '54000' || error.message?.toLowerCase().includes('payload too large')) {
+      // base64 muito grande — salva só a publicUrl se tiver
+      if (publicUrl) {
+        await db.from('profiles').update({ avatar_url: publicUrl }).eq('id', S.me.id);
         showNotif('✅ Foto salva com sucesso!');
-        // Atualiza o board para refletir a nova foto nos cards
         renderBoard();
-      } else if (error.message?.includes('payload too large')) {
-        showNotif('⚠️ Foto salva localmente (muita grande para o banco).');
       } else {
-        showNotif('📸 Foto salva localmente.');
+        showNotif('⚠️ Foto salva localmente (imagem grande demais para o banco).');
       }
-    });
+    } else {
+      console.error('[avatar] DB save error:', error.message);
+      showNotif('📸 Foto salva localmente.');
+    }
   } else {
     showNotif('📸 Foto salva localmente.');
   }
