@@ -226,6 +226,21 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Storage bucket para fotos de perfil (bucket público)
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('avatars', 'avatars', true, 5242880, array['image/jpeg','image/png','image/webp','image/gif','image/heic'])
+on conflict (id) do update set public = true, file_size_limit = 5242880;
+
+drop policy if exists "avatars_public_read"  on storage.objects;
+drop policy if exists "avatars_auth_upload"  on storage.objects;
+drop policy if exists "avatars_auth_update"  on storage.objects;
+drop policy if exists "avatars_auth_delete"  on storage.objects;
+
+create policy "avatars_public_read"  on storage.objects for select  using (bucket_id = 'avatars');
+create policy "avatars_auth_upload"  on storage.objects for insert  with check (bucket_id = 'avatars' and auth.uid() is not null);
+create policy "avatars_auth_update"  on storage.objects for update  using (bucket_id = 'avatars' and auth.uid() is not null);
+create policy "avatars_auth_delete"  on storage.objects for delete  using (bucket_id = 'avatars' and auth.uid() is not null);
       </div>
       <div style="display:flex;gap:10px;margin-top:4px;">
         <button class="btn btn-secondary" onclick="goStep(1)">← Voltar</button>
@@ -544,6 +559,18 @@ create trigger on_auth_user_created
             </div>
             <button class="btn btn-danger-soft btn-sm" onclick="resetAndReload()">Redefinir</button>
           </div>
+        </div>
+      </div>
+
+      <!-- MOBILE LOGOUT (hidden on desktop, shown on mobile) -->
+      <div class="settings-group mobile-only-logout" style="display:none">
+        <div class="settings-group-title">Conta</div>
+        <div class="settings-row" style="border-bottom:none">
+          <div class="settings-row-info">
+            <div class="settings-row-label" style="color:var(--danger)">Sair da conta</div>
+            <div class="settings-row-desc">Encerrar sessão no ATRIUM.</div>
+          </div>
+          <button class="btn btn-danger-soft btn-sm" onclick="doLogout()">Sair</button>
         </div>
       </div>
 
@@ -2035,40 +2062,46 @@ async function handleProfilePic(input) {
 
   if (!base64) { showNotif('❌ Imagem inválida.'); return; }
 
-  // 2. Salva no localStorage AGORA — garante persistência mesmo sem DB
+  // 2. Salva no localStorage AGORA — garante persistência imediata mesmo sem rede
   const userId = S.me?.id;
   if (userId) {
     _saveLocalAvatar(userId, base64);
   }
 
-  // 3. Atualiza estado e UI (sem chamar renderBoard — evita sobrescrever notificação)
+  // 3. Atualiza estado local e UI imediatamente
   if (S.me) S.me.avatar_url = base64;
   const mp = S.profiles?.find(p => p.id === userId);
   if (mp) mp.avatar_url = base64;
 
   const avStyle = `background-image:url('${base64}');background-color:transparent;background-size:cover;background-position:center`;
-  const overlay = `<div class="profile-avatar-overlay"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>`;
+  const overlayHtml = `<div class="profile-avatar-overlay"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>`;
   const zone = document.getElementById('profile-avatar-lg-container');
-  if (zone) zone.innerHTML = `<div class="avatar av-xl" style="${avStyle}"></div>${overlay}`;
+  if (zone) zone.innerHTML = `<div class="avatar av-xl" style="${avStyle}"></div>${overlayHtml}`;
   const sb = document.getElementById('sb-avatar-container');
   if (sb) sb.innerHTML = `<div class="avatar av-md" style="${avStyle}"></div>`;
 
-  showNotif('✅ Foto salva! Clique em Salvar Alterações para confirmar.');
+  showNotif('⏳ Foto atualizada. Sincronizando com o servidor...');
 
-  // 4. Salva na DB em background
+  // 4. Tenta salvar direto na coluna avatar_url do DB
+  //    Se a base64 for grande demais → faz upload para o Supabase Storage
   if (db && userId) {
-    db.from('profiles')
-      .update({ avatar_url: base64 })
-      .eq('id', userId)
-      .then(({ error }) => {
-        if (!error) {
-          showNotif('✅ Foto sincronizada com o banco!');
-        } else {
-          // Se a base64 for grande demais, tenta só salvar no Storage
-          _uploadAvatarToStorage(base64, userId);
-        }
-      })
-      .catch(() => { _uploadAvatarToStorage(base64, userId); });
+    // Limita tentativa de base64 a 500 KB para não sobrecarregar o DB
+    if (base64.length <= 512000) {
+      db.from('profiles')
+        .update({ avatar_url: base64 })
+        .eq('id', userId)
+        .then(({ error }) => {
+          if (!error) {
+            showNotif('✅ Foto sincronizada com o servidor!');
+          } else {
+            _uploadAvatarToStorage(base64, userId);
+          }
+        })
+        .catch(() => { _uploadAvatarToStorage(base64, userId); });
+    } else {
+      // Imagem grande → vai direto pro Storage
+      _uploadAvatarToStorage(base64, userId);
+    }
   }
 }
 
@@ -2086,12 +2119,21 @@ async function _uploadAvatarToStorage(base64, userId) {
       if (publicUrl) {
         _saveLocalAvatar(userId, publicUrl);
         if (S.me) S.me.avatar_url = publicUrl;
+        const mp = S.profiles?.find(p => p.id === userId);
+        if (mp) mp.avatar_url = publicUrl;
+        // Atualiza TODOS os pontos de avatar no DOM
         const avStyle = `background-image:url('${publicUrl}');background-color:transparent;background-size:cover;background-position:center`;
+        const overlayHtml = `<div class="profile-avatar-overlay"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>`;
         const sb = document.getElementById('sb-avatar-container');
         if (sb) sb.innerHTML = `<div class="avatar av-md" style="${avStyle}"></div>`;
+        const zone = document.getElementById('profile-avatar-lg-container');
+        if (zone) zone.innerHTML = `<div class="avatar av-xl" style="${avStyle}"></div>${overlayHtml}`;
         await db.from('profiles').update({ avatar_url: publicUrl }).eq('id', userId);
-        showNotif('✅ Foto sincronizada!');
+        showNotif('✅ Foto salva no servidor!');
       }
+    } else {
+      // Bucket não existe ainda — base64 no localStorage já garante persistência local
+      showNotif('⚠️ Foto salva localmente. Configure o bucket "avatars" no Supabase Storage para sincronizar entre dispositivos.');
     }
   } catch(e) { /* Storage falhou — base64 no localStorage é suficiente */ }
 }
@@ -2101,19 +2143,10 @@ async function saveProfile() {
   const role = document.getElementById('p-role')?.value || S.me?.role || 'corretor';
   if (!name) { showNotif('⚠️ Nome não pode ser vazio.'); return; }
 
-  // Avatar: localStorage é a fonte da verdade
-  const avatar_url = _loadLocalAvatar(S.me?.id) || S.me?.avatar_url || null;
-
   setBtnLoading('save-profile-btn', true);
 
-  // Tenta salvar tudo incluindo avatar_url
-  let { error } = await db.from('profiles').update({ name, role, avatar_url }).eq('id', S.me.id);
-
-  if (error && (error.message?.toLowerCase().includes('avatar_url') || error.message?.toLowerCase().includes('schema cache'))) {
-    // Coluna avatar_url não existe — salva só nome e cargo
-    const res2 = await db.from('profiles').update({ name, role }).eq('id', S.me.id);
-    error = res2.error;
-  }
+  // Salva apenas nome e cargo — avatar já é salvo automaticamente pelo handleProfilePic
+  const { error } = await db.from('profiles').update({ name, role }).eq('id', S.me.id);
 
   setBtnLoading('save-profile-btn', false);
 
@@ -2125,9 +2158,8 @@ async function saveProfile() {
   // Atualiza estado local
   S.me.name = name;
   S.me.role = role;
-  if (avatar_url) S.me.avatar_url = avatar_url;
   const mp = S.profiles.find(p => p.id === S.me.id);
-  if (mp) { mp.name = name; mp.role = role; if (avatar_url) mp.avatar_url = avatar_url; }
+  if (mp) { mp.name = name; mp.role = role; }
 
   showNotif('✅ Perfil atualizado!');
   renderSidebar();
