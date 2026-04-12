@@ -1977,24 +1977,27 @@ function _dataURLtoBlob(dataURL) {
 
 function _resizeImageCanvas(file) {
   return new Promise((resolve, reject) => {
+    // Timeout de 8s — evita hang silencioso em HEIC/imagens problemáticas
+    const timeout = setTimeout(() => reject(new Error('timeout')), 8000);
     const reader = new FileReader();
-    reader.onerror = reject;
+    reader.onerror = (e) => { clearTimeout(timeout); reject(e); };
     reader.onload = (e) => {
       const img = new Image();
-      img.onerror = reject;
+      img.onerror = (e) => { clearTimeout(timeout); reject(e); };
       img.onload = () => {
-        const SIZE = 200;
-        const canvas = document.createElement('canvas');
-        canvas.width = SIZE; canvas.height = SIZE;
-        const ctx = canvas.getContext('2d');
-        // Draw centralizado / cropped (cover)
-        const scale = Math.max(SIZE / img.width, SIZE / img.height);
-        const sw = SIZE / scale, sh = SIZE / scale;
-        const sx = (img.width - sw) / 2, sy = (img.height - sh) / 2;
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, SIZE, SIZE);
-        // Tentar WebP, fallback para JPEG
-        const webp = canvas.toDataURL('image/webp', 0.88);
-        resolve(webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/jpeg', 0.88));
+        clearTimeout(timeout);
+        try {
+          const SIZE = 200;
+          const canvas = document.createElement('canvas');
+          canvas.width = SIZE; canvas.height = SIZE;
+          const ctx = canvas.getContext('2d');
+          const scale = Math.max(SIZE / img.width, SIZE / img.height);
+          const sw = SIZE / scale, sh = SIZE / scale;
+          const sx = (img.width - sw) / 2, sy = (img.height - sh) / 2;
+          ctx.drawImage(img, sx, sy, sw, sh, 0, 0, SIZE, SIZE);
+          const webp = canvas.toDataURL('image/webp', 0.82);
+          resolve(webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/jpeg', 0.82));
+        } catch(e) { reject(e); }
       };
       img.src = e.target.result;
     };
@@ -2008,45 +2011,89 @@ function _resizeImageCanvas(file) {
 async function handleProfilePic(input) {
   const file = input?.files?.[0];
   if (!file) return;
+
   showNotif('⏳ Processando imagem…');
 
-  // 1. Redimensiona para 200x200 via Canvas
+  // 1. Tenta redimensionar via Canvas; se falhar usa o arquivo direto
   let base64;
-  try { base64 = await _resizeImageCanvas(file); }
-  catch(e) { showNotif('❌ Erro ao processar imagem.'); return; }
-
-  // 2. Salva no localStorage IMEDIATAMENTE — persiste mesmo sem DB
-  if (S.me?.id) _saveLocalAvatar(S.me.id, base64);
-
-  // 3. Atualiza TODA a UI instantaneamente
-  _applyAvatarToDOM(base64);
-  renderBoard(); // atualiza bolinhas nos cards
-
-  showNotif('✅ Foto atualizada!');
-
-  // 4. Upload para Supabase Storage em background (melhora a URL pública)
-  if (db && S.me?.id) {
+  try {
+    base64 = await _resizeImageCanvas(file);
+  } catch(e) {
+    // Fallback: lê o arquivo como base64 sem redimensionar
     try {
-      const blob = _dataURLtoBlob(base64);
-      const ext  = blob.type === 'image/webp' ? 'webp' : 'jpg';
-      const fileName = `${S.me.id}/avatar.${ext}`;
-      const { error: upErr } = await db.storage
-        .from('avatars')
-        .upload(fileName, blob, { contentType: blob.type, upsert: true });
-      if (!upErr) {
-        const { data: urlData } = db.storage.from('avatars').getPublicUrl(fileName);
-        const publicUrl = urlData?.publicUrl ? urlData.publicUrl + '?t=' + Date.now() : null;
-        if (publicUrl) {
-          _saveLocalAvatar(S.me.id, publicUrl);
-          _applyAvatarToDOM(publicUrl);
-        }
-      }
-    } catch(e) { /* Storage indisponível — base64 local é suficiente */ }
-
-    // 5. Salva na DB em background (base64 se não tiver publicUrl)
-    const finalUrl = _loadLocalAvatar(S.me.id) || base64;
-    db.from('profiles').update({ avatar_url: finalUrl }).eq('id', S.me.id).catch(() => {});
+      base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onerror = rej;
+        r.onload  = ev => res(ev.target.result);
+        r.readAsDataURL(file);
+      });
+    } catch(e2) {
+      showNotif('❌ Não foi possível ler a imagem. Tente outro formato.');
+      return;
+    }
   }
+
+  if (!base64) { showNotif('❌ Imagem inválida.'); return; }
+
+  // 2. Salva no localStorage AGORA — garante persistência mesmo sem DB
+  const userId = S.me?.id;
+  if (userId) {
+    _saveLocalAvatar(userId, base64);
+  }
+
+  // 3. Atualiza estado e UI (sem chamar renderBoard — evita sobrescrever notificação)
+  if (S.me) S.me.avatar_url = base64;
+  const mp = S.profiles?.find(p => p.id === userId);
+  if (mp) mp.avatar_url = base64;
+
+  const avStyle = `background-image:url('${base64}');background-color:transparent;background-size:cover;background-position:center`;
+  const overlay = `<div class="profile-avatar-overlay"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>`;
+  const zone = document.getElementById('profile-avatar-lg-container');
+  if (zone) zone.innerHTML = `<div class="avatar av-xl" style="${avStyle}"></div>${overlay}`;
+  const sb = document.getElementById('sb-avatar-container');
+  if (sb) sb.innerHTML = `<div class="avatar av-md" style="${avStyle}"></div>`;
+
+  showNotif('✅ Foto salva! Clique em Salvar Alterações para confirmar.');
+
+  // 4. Salva na DB em background
+  if (db && userId) {
+    db.from('profiles')
+      .update({ avatar_url: base64 })
+      .eq('id', userId)
+      .then(({ error }) => {
+        if (!error) {
+          showNotif('✅ Foto sincronizada com o banco!');
+        } else {
+          // Se a base64 for grande demais, tenta só salvar no Storage
+          _uploadAvatarToStorage(base64, userId);
+        }
+      })
+      .catch(() => { _uploadAvatarToStorage(base64, userId); });
+  }
+}
+
+async function _uploadAvatarToStorage(base64, userId) {
+  if (!db || !userId) return;
+  try {
+    const blob = _dataURLtoBlob(base64);
+    const ext  = blob.type === 'image/webp' ? 'webp' : 'jpg';
+    const { error: upErr } = await db.storage
+      .from('avatars')
+      .upload(`${userId}/avatar.${ext}`, blob, { contentType: blob.type, upsert: true });
+    if (!upErr) {
+      const { data } = db.storage.from('avatars').getPublicUrl(`${userId}/avatar.${ext}`);
+      const publicUrl = data?.publicUrl ? data.publicUrl + '?t=' + Date.now() : null;
+      if (publicUrl) {
+        _saveLocalAvatar(userId, publicUrl);
+        if (S.me) S.me.avatar_url = publicUrl;
+        const avStyle = `background-image:url('${publicUrl}');background-color:transparent;background-size:cover;background-position:center`;
+        const sb = document.getElementById('sb-avatar-container');
+        if (sb) sb.innerHTML = `<div class="avatar av-md" style="${avStyle}"></div>`;
+        await db.from('profiles').update({ avatar_url: publicUrl }).eq('id', userId);
+        showNotif('✅ Foto sincronizada!');
+      }
+    }
+  } catch(e) { /* Storage falhou — base64 no localStorage é suficiente */ }
 }
 
 async function saveProfile() {
