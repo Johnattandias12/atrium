@@ -1719,6 +1719,7 @@ async function quickAssign(cardId, assigneeId) {
   showNotif(assigneeId ? '✅ Responsável atualizado!' : '✅ Responsável removido.');
   await loadCards();
   renderBoard();
+  renderStats();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1745,7 +1746,7 @@ async function reopenCard(cardId) {
 ═══════════════════════════════════════════════════════ */
 async function loadAndRenderComments(cardId) {
   const { data, error } = await db.from('comments')
-    .select('*, author:profiles!comments_user_id_fkey(id,name,color)')
+    .select('*, author:profiles!comments_user_id_fkey(id,name,color,avatar_url)')
     .eq('card_id', cardId)
     .order('created_at', { ascending: true });
   if (error) { console.error(error); return; }
@@ -1760,8 +1761,15 @@ function renderComments() {
   if (!count) { list.innerHTML = '<div style="font-size:13px;color:var(--label3);padding:12px 0">Nenhum comentário ainda.</div>'; return; }
   list.innerHTML = S.cardComments.map(cm => {
     const a = cm.author;
+    // Prefer profile foto se disponível (localStorage → DB join)
+    const localAv = _loadLocalAvatar(a?.id);
+    const avSrc = localAv || a?.avatar_url || null;
+    const commentAvStyle = avSrc
+      ? `background-image:url('${avSrc}');background-size:cover;background-position:center;background-color:transparent`
+      : `background:${safeColor(a?.color)}`;
+    const commentAvContent = avSrc ? '' : esc(initials(a?.name||'?'));
     return `<div class="comment">
-      <div class="avatar av-sm" style="background:${safeColor(a?.color)};flex-shrink:0">${esc(initials(a?.name||'?'))}</div>
+      <div class="avatar av-sm" style="${commentAvStyle};flex-shrink:0">${commentAvContent}</div>
       <div class="comment-content">
         <div class="comment-bubble">
           <div class="comment-author">${esc(a?.name||'–')}</div>
@@ -1884,6 +1892,7 @@ function clearDateFilter() {
   if (df) df.value = '';
   if (dt) dt.value = '';
   renderBoard();
+  updateMobileFilterBadge();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1917,7 +1926,7 @@ async function callAI(prompt) {
         'anthropic-version':'2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true'
       },
-      body: JSON.stringify({ model:'claude-sonnet-4-5', max_tokens:600, messages:[{ role:'user', content: prompt }] })
+      body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:600, messages:[{ role:'user', content: prompt }] })
     });
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error?.message || `HTTP ${r.status}`);
