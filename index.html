@@ -176,6 +176,7 @@ create table if not exists public.cards (
 
 -- Migrações para tabelas já existentes (seguras para re-executar)
 alter table public.cards add column if not exists co_assignee_ids uuid[] default '{}';
+alter table public.cards add column if not exists position float default 0;
 
 create table if not exists public.comments (
   id uuid default gen_random_uuid() primary key,
@@ -842,9 +843,9 @@ let S = {
 };
 
 const COLS = [
-  { id: 'todo',   label: 'A Fazer',      color: '#8E8E93' },
-  { id: 'doing',  label: 'Em Andamento', color: '#007AFF' },
-  { id: 'review', label: 'Revisão',      color: '#FF9500' },
+  { id: 'todo',   label: 'A Fazer',      color: '#FF3B30' },
+  { id: 'doing',  label: 'Em Andamento', color: '#FFD60A' },
+  { id: 'review', label: 'Revisão',      color: '#007AFF' },
   { id: 'done',   label: 'Concluído',    color: '#34C759' },
 ];
 
@@ -1384,9 +1385,12 @@ function filteredCards(colId) {
   });
   
   list.sort((a,b) => {
-    // try to use custom cfg.order map if Database doesn't have a position column.
-    const posA = cfg.cardOrder?.[a.id] ?? 0;
-    const posB = cfg.cardOrder?.[b.id] ?? 0;
+    // localStorage (cfg.cardOrder) tem prioridade — atualizado imediatamente no drag.
+    // Fallback: position do DB; último recurso: created_at (mais recente primeiro).
+    const hasLocalA = cfg.cardOrder?.[a.id] != null;
+    const hasLocalB = cfg.cardOrder?.[b.id] != null;
+    const posA = hasLocalA ? cfg.cardOrder[a.id] : (a.position ?? 9999);
+    const posB = hasLocalB ? cfg.cardOrder[b.id] : (b.position ?? 9999);
     if (posA !== posB) return posA - posB;
     return new Date(b.created_at) - new Date(a.created_at);
   });
@@ -1474,15 +1478,31 @@ function renderBoard() {
           needsUpdate = true;
         }
 
-        // Calculate and save new vertical order
-        const cardNodes = Array.from(evt.to.querySelectorAll('.card'));
+        // Recalculate and save order for destination AND source columns
         if (!cfg.cardOrder) cfg.cardOrder = {};
-        cardNodes.forEach((node, index) => {
-          const cid = node.dataset.id;
-          cfg.cardOrder[cid] = index;
+        const affectedCols = fromCol !== toCol ? [evt.to, evt.from] : [evt.to];
+        affectedCols.forEach(colEl => {
+          const nodes = Array.from(colEl.querySelectorAll('.card[data-id]'));
+          nodes.forEach((node, index) => {
+            const cid = node.dataset.id;
+            cfg.cardOrder[cid] = index;
+            // Update local S.cards position too
+            const lc = S.cards.find(c => c.id === cid);
+            if (lc) lc.position = index;
+            // Update the visible number badge without a full re-render
+            const badge = node.querySelector('.card-priority-num');
+            if (badge) badge.textContent = String(index + 1).padStart(2, '0');
+          });
         });
 
-        persistCfg(); // Save vertical order locally so it is super fast
+        persistCfg(); // Persist locally (fast)
+
+        // Persist order to DB asynchronously (best-effort — requires position column)
+        affectedCols.forEach(colEl => {
+          Array.from(colEl.querySelectorAll('.card[data-id]')).forEach((node, index) => {
+            db.from('cards').update({ position: index }).eq('id', node.dataset.id).catch(() => {});
+          });
+        });
 
         if (needsUpdate || evt.oldIndex !== evt.newIndex) {
           renderStats(); // Update counters if column changed
@@ -1552,9 +1572,9 @@ function renderCardHtml(c, index) {
   return `
   <div class="card status-${c.status} ${overdueClass}" data-id="${c.id}">
     <div class="card-urgency-bar ${isDone ? 'ub-done' : 'ub-'+c.urgency}"></div>
-    <div class="card-priority-num">${String(index + 1).padStart(2, '0')}</div>
     <div style="padding-left:10px">
       <div class="card-head">
+        <div class="card-priority-num">${String(index + 1).padStart(2, '0')}</div>
         <div class="card-title">${esc(c.title)}</div>
         ${isDone
           ? `<div style="display:flex;align-items:center;gap:6px">
@@ -1778,8 +1798,11 @@ function renderTeam() {
     const active = S.cards.filter(c => c.assignee_id === p.id && c.status !== 'done').length;
     const done   = S.cards.filter(c => c.assignee_id === p.id && c.status === 'done').length;
     const isMe   = S.me?.id === p.id;
+    const teamAv = p.avatar_url
+      ? `<div class="avatar av-lg" style="background-image:url('${p.avatar_url}');background-size:cover;background-position:center;background-color:transparent;box-shadow:0 6px 18px rgba(0,0,0,0.4);flex-shrink:0"></div>`
+      : `<div class="avatar av-lg" style="background:${safeColor(p.color)};box-shadow:0 6px 18px rgba(0,0,0,0.4);flex-shrink:0">${esc(initials(p.name))}</div>`;
     return `<div class="team-card" style="${isMe?'border-color:var(--accent);background:rgba(10,132,255,0.06)':''}">
-      <div class="avatar av-lg" style="background:${safeColor(p.color)};box-shadow:0 6px 18px rgba(0,0,0,0.4);flex-shrink:0">${esc(initials(p.name))}</div>
+      ${teamAv}
       <div class="team-info" style="flex:1;min-width:0">
         <div class="team-name" style="display:flex;align-items:center;gap:8px;${isMe?'color:var(--accent);font-weight:700;':'font-weight:600'}">
           ${esc(p.name)}
@@ -2481,8 +2504,11 @@ function renderAnalytics() {
         ? '<div style="text-align:center;color:var(--label3);padding:20px">Nenhum membro ainda.</div>'
         : memberStats.map(m => {
           const pctM = m.total ? Math.round(m.done / m.total * 100) : 0;
+          const analyticsAv = m.avatar_url
+            ? `<div style="width:40px;height:40px;border-radius:50%;background-image:url('${m.avatar_url}');background-size:cover;background-position:center;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.3)"></div>`
+            : `<div style="width:40px;height:40px;border-radius:50%;background:${safeColor(m.color)};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.3)">${esc(initials(m.name))}</div>`;
           return `<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
-            <div style="width:40px;height:40px;border-radius:50%;background:${safeColor(m.color)};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,0.3)">${esc(initials(m.name))}</div>
+            ${analyticsAv}
             <div style="flex:1;min-width:0">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
                 <span style="font-size:14px;font-weight:600">${esc(m.name)} ${m.id === S.me?.id ? '<span style="font-size:10px;background:var(--accent-bg);color:var(--accent);padding:1px 7px;border-radius:99px;font-weight:700">Você</span>' : ''}</span>

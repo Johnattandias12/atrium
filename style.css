@@ -799,14 +799,14 @@ input[type="date"] { color-scheme: dark; }
 }
 .card:hover .card-num-badge { opacity:0.75; color:var(--accent); }
 
-/* card-priority-num: badge minimalista visível dentro do card */
+/* card-priority-num: badge inline no início do card-head */
 .card-priority-num {
-  position:absolute;
-  bottom:7px; right:9px;
-  font-family:var(--font-mono); font-size:8.5px; font-weight:800;
+  display:inline-flex; align-items:center; justify-content:center;
+  flex-shrink:0; align-self:flex-start; margin-top:1px;
+  font-family:var(--font-mono); font-size:8px; font-weight:800;
   color:var(--label4); letter-spacing:0.5px; line-height:1;
   background:var(--fill); border:1px solid var(--separator);
-  padding:1px 5px; border-radius:4px;
+  padding:2px 5px; border-radius:4px; min-width:22px;
   pointer-events:none; user-select:none;
   transition:color 0.18s, background 0.18s, border-color 0.18s;
 }
