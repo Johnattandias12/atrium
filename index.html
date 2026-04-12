@@ -73,6 +73,10 @@
   <symbol id="ic-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
   </symbol>
+  <!-- filter / sliders -->
+  <symbol id="ic-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+  </symbol>
 </svg>
 <style>
 /* ── Inline overrides (main styles in style.css) ── */
@@ -196,16 +200,17 @@ drop policy if exists "comments_read" on public.comments;
 drop policy if exists "comments_insert" on public.comments;
 drop policy if exists "comments_delete" on public.comments;
 
-create policy "profiles_read" on public.profiles for select using (true);
+-- Políticas RLS seguras: apenas usuários autenticados acessam os dados
+create policy "profiles_read"   on public.profiles for select using (auth.uid() is not null);
 create policy "profiles_insert" on public.profiles for insert with check (auth.uid() = id);
 create policy "profiles_update" on public.profiles for update using (auth.uid() = id);
 
-create policy "cards_read" on public.cards for select using (true);
-create policy "cards_insert" on public.cards for insert with check (true);
-create policy "cards_update" on public.cards for update using (true);
-create policy "cards_delete" on public.cards for delete using (true);
+create policy "cards_read"   on public.cards for select using (auth.uid() is not null);
+create policy "cards_insert" on public.cards for insert with check (auth.uid() is not null);
+create policy "cards_update" on public.cards for update using (auth.uid() is not null);
+create policy "cards_delete" on public.cards for delete using (auth.uid() is not null);
 
-create policy "comments_read" on public.comments for select using (true);
+create policy "comments_read"   on public.comments for select using (auth.uid() is not null);
 create policy "comments_insert" on public.comments for insert with check (auth.uid() = user_id);
 create policy "comments_delete" on public.comments for delete using (auth.uid() = user_id or exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'));
 
@@ -392,10 +397,10 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
           <span class="search-icon"><svg width="14" height="14"><use href="#ic-search"/></svg></span>
           <input type="text" placeholder="Buscar demanda…" oninput="onSearch(this.value)" id="search-input">
         </div>
-        <select class="filter-select" id="filter-user" onchange="renderBoard()">
+        <select class="filter-select" id="filter-user" onchange="onFilterChange()">
           <option value="">Todos</option>
         </select>
-        <select class="filter-select" id="filter-urgency" onchange="renderBoard()">
+        <select class="filter-select" id="filter-urgency" onchange="onFilterChange()">
           <option value="">Urgência</option>
           <option value="critica">🔴 Crítica</option>
           <option value="alta">🟠 Alta</option>
@@ -409,13 +414,18 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
           </button>
           <div class="date-filter-wrap hidden" id="date-filter-wrap">
             <span style="font-size:11px;font-weight:600;color:var(--label3);flex-shrink:0">De</span>
-            <input type="date" class="filter-date-input" id="filter-date-from" onchange="renderBoard()" title="De">
+            <input type="date" class="filter-date-input" id="filter-date-from" onchange="onFilterChange()" title="De">
             <span style="color:var(--label3);font-size:12px;flex-shrink:0">→</span>
-            <input type="date" class="filter-date-input" id="filter-date-to" onchange="renderBoard()" title="Até">
+            <input type="date" class="filter-date-input" id="filter-date-to" onchange="onFilterChange()" title="Até">
             <button class="date-clear-btn" onclick="clearDateFilter()" title="Limpar datas">✕</button>
           </div>
         </div>
         <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="openCardDrawer(null, 'todo')">+ Nova demanda</button>
+        <!-- Mobile-only filter trigger -->
+        <button class="mobile-filter-btn" id="mobile-filter-btn" onclick="openFilterSheet()" title="Filtros" aria-label="Abrir filtros">
+          <svg width="16" height="16"><use href="#ic-filter"/></svg>
+          <span class="filter-badge hidden" id="filter-badge">0</span>
+        </button>
       </div>
     </div>
 
@@ -688,6 +698,38 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
   </div>
 </div>
 
+<!-- ═══════════════════ MOBILE FILTER SHEET ═══════════════════ -->
+<div class="filter-sheet-overlay" id="filter-sheet-overlay" onclick="onOverlayClick(event,'filter-sheet-overlay')">
+  <div class="filter-sheet">
+    <div class="filter-sheet-header">
+      <div class="filter-sheet-title">Filtros</div>
+      <button class="filter-sheet-close" onclick="closeFilterSheet()"><svg width="18" height="18"><use href="#ic-x"/></svg></button>
+    </div>
+    <div class="filter-sheet-body">
+      <label class="filter-sheet-label">Responsável</label>
+      <select class="filter-sheet-select" id="mobile-filter-user" onchange="syncMobileFilter()">
+        <option value="">Todos</option>
+      </select>
+      <label class="filter-sheet-label">Urgência</label>
+      <select class="filter-sheet-select" id="mobile-filter-urgency" onchange="syncMobileFilter()">
+        <option value="">Todas</option>
+        <option value="critica">🔴 Crítica</option>
+        <option value="alta">🟠 Alta</option>
+        <option value="media">🟡 Média</option>
+        <option value="baixa">🟢 Baixa</option>
+      </select>
+      <label class="filter-sheet-label">Período — De</label>
+      <input type="date" class="filter-sheet-input" id="mobile-filter-date-from" onchange="syncMobileFilter()">
+      <label class="filter-sheet-label">Período — Até</label>
+      <input type="date" class="filter-sheet-input" id="mobile-filter-date-to" onchange="syncMobileFilter()">
+    </div>
+    <div class="filter-sheet-footer">
+      <button class="btn btn-secondary" style="flex:1" onclick="clearMobileFilters()">Limpar filtros</button>
+      <button class="btn btn-primary" style="flex:1" onclick="closeFilterSheet()">Aplicar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════ FAB — FALE CONOSCO ═══════════════════ -->
 <a href="https://wa.me/5584981235396" target="_blank" rel="noopener noreferrer" class="fab-wa" title="Fale conosco pelo WhatsApp" id="fab-wa">
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -717,6 +759,8 @@ const ATRIUM_DEFAULTS = {
 };
 let cfg = { supabaseUrl: '', supabaseKey: '', anthropicKey: '', theme: 'dark' };
 let db = null;
+let _realtimeChannel = null;
+let _rtDebounceTimers = {};
 
 function loadConfig() {
   try { const s = localStorage.getItem(CFG_KEY); if (s) cfg = { ...cfg, ...JSON.parse(s) }; } catch(e){}
@@ -905,9 +949,60 @@ async function doRegister() {
 }
 
 async function doLogout() {
+  clearTimeout(searchTimer);
+  teardownRealtime();
   await db.auth.signOut();
   S = { session:null, me:null, profiles:[], cards:[], cardComments:[], editingCardId:null, view:'board', search:'', filterUser:'', filterUrgency:'', filterDateFrom:'', filterDateTo:'' };
   showScreen('auth');
+}
+
+/* ═══════════════════════════════════════════════════════
+   REALTIME
+═══════════════════════════════════════════════════════ */
+function _rtDebounce(key, fn, delay = 700) {
+  clearTimeout(_rtDebounceTimers[key]);
+  _rtDebounceTimers[key] = setTimeout(fn, delay);
+}
+
+function setupRealtime() {
+  if (!db || !S.session) return;
+  teardownRealtime(); // evita canais duplicados
+  _realtimeChannel = db.channel('atrium-rt')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'cards' }, () => {
+      _rtDebounce('cards', async () => {
+        await loadCards();
+        renderBoard();
+        renderStats();
+        if (S.view === 'analytics') renderAnalytics();
+      });
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+      _rtDebounce('profiles', async () => {
+        await loadProfiles();
+        renderSidebar();
+        if (S.view === 'team') renderTeam();
+      });
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => {
+      _rtDebounce('comments', async () => {
+        if (!S.editingCardId) return;
+        const { data } = await db.from('comments')
+          .select('*, profiles(name,color,avatar_url)')
+          .eq('card_id', S.editingCardId)
+          .order('created_at');
+        if (data) { S.cardComments = data; renderComments(); }
+      });
+    })
+    .subscribe();
+}
+
+function teardownRealtime() {
+  if (_realtimeChannel) {
+    try { db.removeChannel(_realtimeChannel); } catch(e) {}
+    _realtimeChannel = null;
+  }
+  Object.keys(_rtDebounceTimers).forEach(k => clearTimeout(_rtDebounceTimers[k]));
+  _rtDebounceTimers = {};
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -930,6 +1025,7 @@ async function bootApp() {
     switchView('board', document.getElementById('nav-board'));
     setTimeout(initParticles, 100);
     showWelcome();
+    setupRealtime();
   } catch(e) {
     if (e.message && e.message.includes('public.profiles')) {
       showNotif('⚠️ Tabelas do banco não encontradas! Siga o passo a passo.');
@@ -1020,12 +1116,13 @@ function _loadLocalAvatar(userId) {
   if (!userId) return null;
   try { return localStorage.getItem('atrium_av_' + userId) || null; } catch(e) { return null; }
 }
-/* Sempre prefere localStorage (mais fresco) sobre o DB */
+/* Prefere localStorage apenas para o próprio usuário — evita dados obsoletos de outros */
 function _mergeLocalAvatars(profileList) {
+  const myId = S.session?.user?.id;
   profileList.forEach(p => {
-    if (!p) return;
+    if (!p || p.id !== myId) return;
     const local = _loadLocalAvatar(p.id);
-    if (local) p.avatar_url = local; // sobrescreve DB se tiver local
+    if (local) p.avatar_url = local;
   });
 }
 
@@ -1118,6 +1215,7 @@ async function loadCards() {
    VIEWS
 ═══════════════════════════════════════════════════════ */
 function switchView(view, navEl) {
+  clearTimeout(searchTimer);
   S.view = view;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   if (navEl) navEl.classList.add('active');
@@ -1199,10 +1297,72 @@ function populateFilters() {
     fa.innerHTML = '<option value="">Sem responsável</option>' + S.profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
     if (cur) fa.value = cur;
   }
+  // Sync mobile filter user options
+  const mfu = document.getElementById('mobile-filter-user');
+  if (mfu) {
+    const cur = mfu.value;
+    mfu.innerHTML = '<option value="">Todos os membros</option>' + S.profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name.split(' ')[0])}</option>`).join('');
+    mfu.value = cur;
+  }
+}
+
+/* ── Mobile filter sheet ── */
+function openFilterSheet() {
+  // Espelha estado atual dos filtros desktop → mobile
+  const mfu = document.getElementById('mobile-filter-user');
+  const mfg = document.getElementById('mobile-filter-urgency');
+  const mfdf = document.getElementById('mobile-filter-date-from');
+  const mfdt = document.getElementById('mobile-filter-date-to');
+  if (mfu) mfu.value = document.getElementById('filter-user')?.value || '';
+  if (mfg) mfg.value = document.getElementById('filter-urgency')?.value || '';
+  if (mfdf) mfdf.value = document.getElementById('filter-date-from')?.value || '';
+  if (mfdt) mfdt.value = document.getElementById('filter-date-to')?.value || '';
+  document.getElementById('filter-sheet-overlay').classList.add('open');
+}
+
+function closeFilterSheet() {
+  document.getElementById('filter-sheet-overlay').classList.remove('open');
+  updateMobileFilterBadge();
+}
+
+function syncMobileFilter() {
+  // Copia valores do sheet → selects desktop (fonte de verdade de filteredCards)
+  const v = (id) => document.getElementById(id)?.value || '';
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+  set('filter-user', v('mobile-filter-user'));
+  set('filter-urgency', v('mobile-filter-urgency'));
+  set('filter-date-from', v('mobile-filter-date-from'));
+  set('filter-date-to', v('mobile-filter-date-to'));
+  // Sincroniza date-filter-wrap visibility
+  const hasDate = v('mobile-filter-date-from') || v('mobile-filter-date-to');
+  document.getElementById('date-filter-wrap')?.classList.toggle('hidden', !hasDate);
+  renderBoard();
+}
+
+function clearMobileFilters() {
+  ['mobile-filter-user','mobile-filter-urgency','mobile-filter-date-from','mobile-filter-date-to'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  syncMobileFilter();
+  updateMobileFilterBadge();
+}
+
+function updateMobileFilterBadge() {
+  const count = [
+    document.getElementById('filter-user')?.value,
+    document.getElementById('filter-urgency')?.value,
+    document.getElementById('filter-date-from')?.value,
+    document.getElementById('filter-date-to')?.value,
+  ].filter(Boolean).length;
+  const badge = document.getElementById('filter-badge');
+  if (!badge) return;
+  badge.textContent = count;
+  badge.classList.toggle('hidden', count === 0);
 }
 
 let searchTimer;
 function onSearch(v) { clearTimeout(searchTimer); searchTimer = setTimeout(() => { S.search = v.toLowerCase(); renderBoard(); }, 200); }
+function onFilterChange() { renderBoard(); updateMobileFilterBadge(); }
 
 function filteredCards(colId) {
   const fu = document.getElementById('filter-user')?.value || '';
@@ -1798,6 +1958,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 function onOverlayClick(e, id) {
   if (e.target.id !== id) return; // só fecha se clicou no fundo, não no conteúdo
   if (id === 'card-overlay') { closeDrawer(id); }
+  else if (id === 'filter-sheet-overlay') { closeFilterSheet(); }
   else { closeModal(id); }
 }
 
