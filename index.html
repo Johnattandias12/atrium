@@ -277,9 +277,6 @@ create trigger on_auth_user_created
       <div class="field"><label>E-mail Corporativo</label><input type="email" id="l-email" placeholder="email@empresa.com.br" onkeydown="if(event.key==='Enter')doLogin()"></div>
       <div class="field"><label>Senha de Acesso</label><input type="password" id="l-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
       <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()" style="padding:13px;font-size:15px;margin-top:8px">Entrar no Sistema</button>
-      <div style="text-align:center;margin-top:20px;">
-        <button class="btn btn-secondary btn-sm" style="margin-top:4px" onclick="goStep(1);showScreen('setup')">Configurar Supabase</button>
-      </div>
     </div>
     <div id="auth-register" class="hidden">
       <div class="field"><label>Nome Completo</label><input type="text" id="r-name" placeholder="Ana Beatriz Silva" onkeydown="if(event.key==='Enter')doRegister()"></div>
