@@ -8,6 +8,14 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%230A84FF'/><text x='50' y='76' font-family='system-ui,-apple-system,sans-serif' font-weight='900' font-size='68' fill='%23FFFFFF' text-anchor='middle'>A</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Tema aplicado ANTES do CSS para evitar flash dark na inicialização -->
+<script>
+  try {
+    var _c = JSON.parse(localStorage.getItem('atrium_cfg') || '{}');
+    document.documentElement.setAttribute('data-theme',
+      _c.theme || localStorage.getItem('atrium_theme') || 'dark');
+  } catch(e) { document.documentElement.setAttribute('data-theme','dark'); }
+</script>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
@@ -378,17 +386,20 @@ create trigger on_auth_user_created
           <option value="media">🟡 Média</option>
           <option value="baixa">🟢 Baixa</option>
         </select>
-        <button class="date-filter-toggle" id="date-filter-toggle" onclick="toggleDateFilter()" title="Filtrar por período">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Período
-        </button>
-        <div class="date-filter-wrap hidden" id="date-filter-wrap">
-          <input type="date" class="filter-date-input" id="filter-date-from" onchange="renderBoard()" title="De">
-          <span style="color:var(--label3);font-size:12px;flex-shrink:0">→</span>
-          <input type="date" class="filter-date-input" id="filter-date-to" onchange="renderBoard()" title="Até">
-          <button class="date-clear-btn" onclick="clearDateFilter()" title="Limpar datas">✕</button>
+        <div style="position:relative;flex-shrink:0">
+          <button class="date-filter-toggle" id="date-filter-toggle" onclick="toggleDateFilter()" title="Filtrar por período">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Período
+          </button>
+          <div class="date-filter-wrap hidden" id="date-filter-wrap">
+            <span style="font-size:11px;font-weight:600;color:var(--label3);flex-shrink:0">De</span>
+            <input type="date" class="filter-date-input" id="filter-date-from" onchange="renderBoard()" title="De">
+            <span style="color:var(--label3);font-size:12px;flex-shrink:0">→</span>
+            <input type="date" class="filter-date-input" id="filter-date-to" onchange="renderBoard()" title="Até">
+            <button class="date-clear-btn" onclick="clearDateFilter()" title="Limpar datas">✕</button>
+          </div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openCardDrawer(null, 'todo')">+ Nova demanda</button>
+        <button class="btn btn-primary btn-sm" style="flex-shrink:0" onclick="openCardDrawer(null, 'todo')">+ Nova demanda</button>
       </div>
     </div>
 
@@ -591,8 +602,13 @@ create trigger on_auth_user_created
               <option value="critica">🔴 Crítica</option>
             </select>
           </div>
-          <div class="field"><label>Responsável</label><select id="f-assignee"></select></div>
+          <div class="field"><label>Responsável</label><select id="f-assignee" onchange="_drawCoAssigneePicker()"></select></div>
           <div class="field"><label>Data limite</label><input type="date" id="f-deadline"></div>
+        </div>
+        <!-- Co-responsáveis (múltiplas pessoas) -->
+        <div class="field" id="co-assignee-field">
+          <label>Co-responsáveis</label>
+          <div class="co-assignee-picker" id="co-assignee-picker"></div>
         </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:24px;">
@@ -894,11 +910,68 @@ function showWelcome() {
   const name = S.me?.name?.split(' ')[0] || 'Você';
   const hello = document.getElementById('welcome-hello-text');
   const sub   = document.getElementById('welcome-sub-text');
+  // Atualiza avatar do welcome ring com foto do usuário se disponível
+  const ring = document.getElementById('welcome-ring');
+  if (ring && S.me?.avatar_url) {
+    ring.style.backgroundImage = `url('${S.me.avatar_url}')`;
+    ring.style.backgroundSize = 'cover';
+    ring.style.backgroundPosition = 'center';
+    ring.textContent = '';
+  } else if (ring) {
+    ring.style.backgroundImage = '';
+    ring.textContent = S.me?.name?.[0]?.toUpperCase() || 'A';
+  }
   if (hello) hello.textContent = `Olá, ${name}!`;
   if (sub)   sub.textContent   = 'Bem-vindo de volta ao ATRIUM · Beyonder 2026';
   if (!ov) return;
+  // Entrada suave
+  ov.style.cssText = '';
   ov.classList.add('show');
-  setTimeout(() => { ov.style.opacity = '0'; setTimeout(() => { ov.classList.remove('show'); ov.style.opacity = ''; }, 500); }, 2200);
+  // Saída com scale + blur — transição premium
+  setTimeout(() => {
+    ov.style.transition = 'opacity 0.6s var(--ease-in-out), transform 0.6s var(--ease-in-out), filter 0.6s var(--ease-in-out)';
+    ov.style.opacity = '0';
+    ov.style.transform = 'scale(1.06)';
+    ov.style.filter = 'blur(8px)';
+    setTimeout(() => { ov.classList.remove('show'); ov.style.cssText = ''; }, 650);
+  }, 2000);
+}
+
+/* ═══════════════════════════════════════════════════════
+   CO-RESPONSÁVEIS — multi-select via pills
+═══════════════════════════════════════════════════════ */
+let _coSelected = new Set();
+
+function renderCoAssigneePicker(currentIds) {
+  _coSelected = new Set(currentIds || []);
+  _drawCoAssigneePicker();
+}
+
+function _drawCoAssigneePicker() {
+  const container = document.getElementById('co-assignee-picker');
+  if (!container) return;
+  const mainId = document.getElementById('f-assignee')?.value || '';
+  const available = S.profiles.filter(p => p.id !== mainId);
+  container.innerHTML = available.map(p => {
+    const sel = _coSelected.has(p.id);
+    const avatarHtml = renderAvatarHtml(p, 'av-sm');
+    return `<button type="button" class="co-pill ${sel ? 'co-pill-active' : ''}"
+      onclick="toggleCoAssignee('${esc(p.id)}')" title="${esc(p.name)}">
+      ${avatarHtml}
+      <span>${esc(p.name.split(' ')[0])}</span>
+      ${sel ? '<span style="font-size:10px;opacity:0.7">✓</span>' : ''}
+    </button>`;
+  }).join('');
+}
+
+function toggleCoAssignee(id) {
+  if (_coSelected.has(id)) _coSelected.delete(id);
+  else _coSelected.add(id);
+  _drawCoAssigneePicker();
+}
+
+function getSelectedCoAssignees() {
+  return Array.from(_coSelected);
 }
 
 /* ─── Avatar localStorage helpers (works even without avatar_url column in DB) ─── */
@@ -971,10 +1044,13 @@ async function loadProfiles() {
 
 async function loadCards() {
   const { data, error } = await db.from('cards')
-    .select('*, assignee:profiles!cards_assignee_id_fkey(id,name,color,role)')
+    .select('*, assignee:profiles!cards_assignee_id_fkey(id,name,color,role), co_assignee_ids')
     .order('created_at', { ascending: false });
   if (error) throw error;
-  S.cards = data || [];
+  S.cards = (data || []).map(c => ({
+    ...c,
+    co_assignee_ids: Array.isArray(c.co_assignee_ids) ? c.co_assignee_ids : [],
+  }));
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1237,10 +1313,19 @@ function renderCardHtml(c, index) {
   const overdue = c.deadline && c.deadline < today && c.status !== 'done';
   const soon = c.deadline && c.deadline <= soonStr && c.deadline >= today && c.status !== 'done';
   const dateClass = overdue ? 'overdue' : soon ? 'soon' : '';
-  const a = c.assignee;
+  // Usa S.profiles (que tem avatar_url local mergeado) em vez do join sem foto
+  const a = c.assignee_id ? (S.profiles.find(p => p.id === c.assignee_id) || c.assignee) : null;
   const isDone = c.status === 'done';
   const calIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
   const overdueClass = overdue ? 'is-overdue' : '';
+
+  // Co-responsáveis: IDs armazenados em co_assignee_ids[]
+  const coIds = Array.isArray(c.co_assignee_ids) ? c.co_assignee_ids.filter(id => id !== c.assignee_id) : [];
+  const coProfiles = coIds.map(id => S.profiles.find(p => p.id === id)).filter(Boolean);
+  const coAvatarsHtml = coProfiles.length
+    ? `<div class="card-co-avatars">${coProfiles.slice(0,3).map(p => renderAvatarHtml(p,'av-sm')).join('')}${coProfiles.length > 3 ? `<div class="avatar av-sm" style="background:var(--fill2);font-size:8px">+${coProfiles.length-3}</div>` : ''}</div>`
+    : '';
+
   return `
   <div class="card status-${c.status} ${overdueClass}" data-id="${c.id}">
     <div class="card-urgency-bar ${isDone ? 'ub-done' : 'ub-'+c.urgency}"></div>
@@ -1260,10 +1345,13 @@ function renderCardHtml(c, index) {
       </div>
       ${c.description ? `<div class="card-desc">${esc(c.description)}</div>` : ''}
       <div class="card-footer">
-        ${a
-          ? `<div class="card-assignee">${renderAvatarHtml(a, 'av-sm')}<span class="truncate">${esc(a.name.split(' ')[0])}</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Remover…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}" ${p.id===a.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`
-          : `<div class="card-assignee" style="opacity:0.5">${renderAvatarHtml(null, 'av-sm')}<span class="truncate">Sem dono</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Atribuir…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>`
-        }
+        <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">
+          ${a
+            ? `<div class="card-assignee">${renderAvatarHtml(a, 'av-sm')}<span class="truncate">${esc(a.name.split(' ')[0])}</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Remover…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}" ${p.id===a.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`
+            : `<div class="card-assignee" style="opacity:0.5">${renderAvatarHtml(null, 'av-sm')}<span class="truncate">Sem dono</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Atribuir…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>`
+          }
+          ${coAvatarsHtml}
+        </div>
         ${c.deadline ? `<div class="card-date ${dateClass}">${calIcon} ${fmtDate(c.deadline)}</div>` : ''}
       </div>
     </div>
@@ -1293,6 +1381,9 @@ function openCardDrawer(cardId, defaultStatus) {
   populateFilters();
   const fa = document.getElementById('f-assignee');
   if (fa) fa.value = card?.assignee_id || S.me?.id || '';
+
+  // Co-responsáveis
+  renderCoAssigneePicker(card?.co_assignee_ids || []);
 
   // Comments section
   const commSec = document.getElementById('comments-section');
@@ -1324,21 +1415,40 @@ async function saveCard() {
     urgency: document.getElementById('f-urgency').value,
     assignee_id: document.getElementById('f-assignee').value || null,
     deadline: document.getElementById('f-deadline').value || null,
+    co_assignee_ids: getSelectedCoAssignees(),
     updated_at: new Date().toISOString(),
   };
 
   setBtnLoading('save-card-btn', true);
+
+  /* Helper: se co_assignee_ids falhar (coluna não existe ainda), retry sem ela */
+  async function _upsertCard(isUpdate) {
+    if (isUpdate) {
+      let r = await db.from('cards').update(payload).eq('id', S.editingCardId);
+      if (r.error?.message?.includes('co_assignee_ids')) {
+        const { co_assignee_ids: _, ...fallback } = payload;
+        r = await db.from('cards').update(fallback).eq('id', S.editingCardId);
+      }
+      return r;
+    } else {
+      let r = await db.from('cards').insert({ ...payload, created_by: S.me?.id });
+      if (r.error?.message?.includes('co_assignee_ids')) {
+        const { co_assignee_ids: _, ...fallback } = payload;
+        r = await db.from('cards').insert({ ...fallback, created_by: S.me?.id });
+      }
+      return r;
+    }
+  }
+
   if (S.editingCardId) {
-    const { error } = await db.from('cards').update(payload).eq('id', S.editingCardId);
+    const { error } = await _upsertCard(true);
     setBtnLoading('save-card-btn', false);
     if (error) { showNotif('❌ Erro: ' + error.message); return; }
-    // Update local state immediately
     const localCard = S.cards.find(c => c.id === S.editingCardId);
     if (localCard) Object.assign(localCard, payload);
     showNotif('✅ Demanda atualizada!');
   } else {
-    payload.created_by = S.me?.id;
-    const { error } = await db.from('cards').insert(payload);
+    const { error } = await _upsertCard(false);
     setBtnLoading('save-card-btn', false);
     if (error) { showNotif('❌ Erro: ' + error.message); return; }
     showNotif('✅ Demanda criada!');
@@ -1885,9 +1995,27 @@ async function handleProfilePic(input) {
     } catch(e) { /* bucket não existe — fallback para base64 */ }
   }
 
-  // Persiste localmente como fallback
-  if (S.me?.id) _saveLocalAvatar(S.me.id, publicUrl || base64);
-  showNotif('📸 Foto atualizada! Clique em Salvar para confirmar.');
+  const finalUrl = publicUrl || base64;
+
+  // Persiste localmente como fallback garantido
+  if (S.me?.id) _saveLocalAvatar(S.me.id, finalUrl);
+
+  // Auto-salva na DB imediatamente — não precisa clicar em "Salvar"
+  if (db && S.me?.id) {
+    db.from('profiles').update({ avatar_url: finalUrl }).eq('id', S.me.id).then(({ error }) => {
+      if (!error) {
+        showNotif('✅ Foto salva com sucesso!');
+        // Atualiza o board para refletir a nova foto nos cards
+        renderBoard();
+      } else if (error.message?.includes('payload too large')) {
+        showNotif('⚠️ Foto salva localmente (muita grande para o banco).');
+      } else {
+        showNotif('📸 Foto salva localmente.');
+      }
+    });
+  } else {
+    showNotif('📸 Foto salva localmente.');
+  }
 }
 
 async function saveProfile() {

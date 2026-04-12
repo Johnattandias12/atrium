@@ -146,6 +146,34 @@ body {
 .font-semibold { font-weight: 600; } .font-bold { font-weight: 700; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ── CO-RESPONSÁVEIS PICKER ── */
+.co-assignee-picker {
+  display:flex; flex-wrap:wrap; gap:6px; min-height:36px; padding:4px 0;
+}
+.co-pill {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:4px 10px 4px 4px; border-radius:99px;
+  border:1.5px solid var(--separator); background:var(--fill);
+  cursor:pointer; font-family:var(--font); font-size:12px; font-weight:500;
+  color:var(--label2); transition:all 0.15s var(--ease-out);
+  user-select:none;
+}
+.co-pill:hover { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
+.co-pill-active { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
+:root[data-theme="light"] .co-pill { background:#fff; border-color:rgba(0,0,0,0.10); color:var(--label2); }
+:root[data-theme="light"] .co-pill-active { background:var(--accent-bg); border-color:var(--accent); color:var(--accent); }
+
+/* ── STACKED AVATARS NOS CARDS ── */
+.card-co-avatars {
+  display:flex; align-items:center;
+}
+.card-co-avatars .avatar {
+  margin-left:-6px; border:2px solid var(--bg2);
+  transition:transform 0.15s;
+}
+.card-co-avatars .avatar:first-child { margin-left:4px; }
+.card-co-avatars:hover .avatar { transform:translateX(0); }
+
 /* ─── TICKER (seamless: content must be 2× in JS) ─── */
 .ticker-wrap {
   overflow: hidden; white-space: nowrap; pointer-events: none;
@@ -373,10 +401,12 @@ input[type="date"] { color-scheme: dark; }
 #welcome-overlay {
   position:fixed; inset:0; z-index:8000;
   display:flex; align-items:center; justify-content:center; flex-direction:column;
-  background:radial-gradient(ellipse at 50% 45%,rgba(10,132,255,0.15) 0%,rgba(5,5,10,0.97) 55%);
-  opacity:0; pointer-events:none; transition:opacity 0.4s var(--ease-in-out);
+  background:radial-gradient(ellipse at 50% 45%,rgba(10,132,255,0.18) 0%,rgba(5,5,10,0.97) 60%);
+  opacity:0; pointer-events:none;
+  transform:scale(0.97); filter:blur(4px);
+  transition:opacity 0.5s var(--ease-spring), transform 0.5s var(--ease-spring), filter 0.45s var(--ease-in-out);
 }
-#welcome-overlay.show { opacity:1; pointer-events:all; }
+#welcome-overlay.show { opacity:1; pointer-events:all; transform:scale(1); filter:blur(0); }
 .welcome-ring {
   width:88px; height:88px; border-radius:26px;
   background:linear-gradient(145deg,#2494ff 0%,#0060d0 100%);
@@ -386,6 +416,8 @@ input[type="date"] { color-scheme: dark; }
   animation:welcomePop 0.65s var(--ease-spring) backwards; margin-bottom:24px; position:relative;
 }
 .welcome-ring::after { content:''; position:absolute; inset:-2px; border-radius:28px; border:1.5px solid rgba(255,255,255,0.2); }
+/* Quando tem foto de perfil, o ring vira um círculo com foto */
+.welcome-ring[style*="background-image"] { border-radius:50%; background-color:transparent !important; }
 .welcome-hello {
   font-family:var(--font-display); font-size:40px; font-weight:800;
   letter-spacing:-1.5px; line-height:1; margin-bottom:9px;
@@ -548,15 +580,18 @@ input[type="date"] { color-scheme: dark; }
 :root[data-theme="light"] .filter-select option { background:#ffffff; color:#0F172A; }
 :root[data-theme="light"] .filter-select:hover { background-color:#f4f6fa; }
 
-/* Date range filter */
+/* Date range filter — dropdown absoluto (não quebra o layout da topbar) */
 .date-filter-wrap {
-  display:flex; align-items:center; gap:5px;
-  background:var(--input-bg); border:1.5px solid var(--separator);
-  border-radius:10px; padding:3px 8px; height:34px;
-  flex-shrink:0; animation:fadeIn 0.2s;
+  position:absolute; top:calc(100% + 6px); right:0; z-index:200;
+  display:flex; align-items:center; gap:8px;
+  background:var(--surface2); border:1.5px solid var(--separator);
+  border-radius:var(--radius); padding:10px 14px;
+  box-shadow:var(--shadow-md); white-space:nowrap;
+  animation:fadeDown 0.2s var(--ease-spring);
+  min-width:300px;
 }
-:root[data-theme="light"] .date-filter-wrap { background:#fff; border-color:rgba(0,0,0,0.12); box-shadow:var(--shadow-xs); }
-.date-filter-wrap.has-value { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+:root[data-theme="light"] .date-filter-wrap { background:#fff; border-color:rgba(0,0,0,0.1); box-shadow:var(--shadow-md); }
+.date-filter-wrap.has-value { border-color:var(--accent); }
 .filter-date-input {
   background:none; border:none; outline:none; padding:0 4px;
   font-family:var(--font); font-size:12px; color:var(--label); cursor:pointer;
