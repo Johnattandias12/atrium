@@ -77,6 +77,10 @@
   <symbol id="ic-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
   </symbol>
+  <!-- personal / checklist -->
+  <symbol id="ic-personal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+  </symbol>
 </svg>
 <style>
 /* ── Inline overrides (main styles in style.css) ── */
@@ -214,6 +218,30 @@ create policy "cards_delete" on public.cards for delete using (auth.uid() is not
 create policy "comments_read"   on public.comments for select using (auth.uid() is not null);
 create policy "comments_insert" on public.comments for insert with check (auth.uid() = user_id);
 create policy "comments_delete" on public.comments for delete using (auth.uid() = user_id or exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'));
+
+-- Painel Pessoal: demandas privadas por usuário
+create table if not exists public.personal_tasks (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  title text not null,
+  description text default '',
+  priority text not null default 'media' check (priority in ('baixa','media','alta','critica')),
+  done boolean not null default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table public.personal_tasks enable row level security;
+
+drop policy if exists "personal_tasks_select" on public.personal_tasks;
+drop policy if exists "personal_tasks_insert" on public.personal_tasks;
+drop policy if exists "personal_tasks_update" on public.personal_tasks;
+drop policy if exists "personal_tasks_delete" on public.personal_tasks;
+
+create policy "personal_tasks_select" on public.personal_tasks for select using (auth.uid() = user_id);
+create policy "personal_tasks_insert" on public.personal_tasks for insert with check (auth.uid() = user_id);
+create policy "personal_tasks_update" on public.personal_tasks for update using (auth.uid() = user_id);
+create policy "personal_tasks_delete" on public.personal_tasks for delete using (auth.uid() = user_id);
 
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -365,6 +393,14 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
       <div class="nav-item" id="nav-settings" onclick="switchView('settings', this)">
         <span class="nav-icon-wrap"><svg><use href="#ic-settings"/></svg></span>
         <span class="nav-label">Config</span>
+      </div>
+    </div>
+    <div class="sidebar-section" style="margin-top:4px">
+      <div class="sidebar-section-label">Pessoal</div>
+      <div class="nav-item" id="nav-personal" onclick="switchView('personal', this)">
+        <span class="nav-icon-wrap"><svg><use href="#ic-personal"/></svg></span>
+        <span class="nav-label">Meu Painel</span>
+        <span class="nav-count" id="nav-count-personal" style="display:none">0</span>
       </div>
     </div>
     <div class="sidebar-spacer"></div>
@@ -586,6 +622,23 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
       </div>
 
     </div><!-- end view-settings -->
+
+    <!-- PAINEL PESSOAL VIEW -->
+    <div id="view-personal" class="personal-wrap hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+        <div>
+          <h2 style="font-size:22px;font-weight:800;letter-spacing:-0.5px;font-family:var(--font-display)">Meu Painel
+            <span style="font-size:12px;font-weight:500;color:var(--label3);margin-left:8px;letter-spacing:0">🔒 Privado — visível apenas para você</span>
+          </h2>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openPersonalTaskModal(null)">
+          <svg width="13" height="13" style="margin-right:5px"><use href="#ic-plus"/></svg>Nova tarefa
+        </button>
+      </div>
+      <div id="personal-analytics-section"></div>
+      <div id="personal-tasks-content"></div>
+    </div><!-- end view-personal -->
+
     </div><!-- end view-main-content -->
     
     <!-- APP FOOTER -->
@@ -695,6 +748,34 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
     <div style="display:flex;gap:10px;margin-top:4px;">
       <button class="btn btn-secondary flex-1" onclick="closeModal('member-overlay')">Cancelar</button>
       <button class="btn btn-primary flex-1" id="save-member-btn" onclick="saveMember()">Convidar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PERSONAL TASK MODAL ═══════════════════ -->
+<div class="modal-overlay" id="personal-task-overlay" onclick="onOverlayClick(event,'personal-task-overlay')">
+  <div class="modal-box">
+    <div class="modal-title" id="pt-modal-title">Nova Tarefa Pessoal</div>
+    <div class="field">
+      <label>Título *</label>
+      <input type="text" id="pt-title" placeholder="Descreva sua tarefa…" onkeydown="if(event.key==='Enter')savePersonalTask()">
+    </div>
+    <div class="field">
+      <label>Descrição</label>
+      <textarea id="pt-desc" placeholder="Detalhes, anotações…" rows="3" style="resize:vertical;min-height:72px;padding:8px 11px;font-size:13px;border-radius:var(--radius-sm);border:1px solid var(--separator);background:var(--input-bg);color:var(--label);font-family:var(--font);outline:none;width:100%"></textarea>
+    </div>
+    <div class="field">
+      <label>Prioridade</label>
+      <select id="pt-priority">
+        <option value="baixa">🟢 Baixa</option>
+        <option value="media" selected>🟡 Média</option>
+        <option value="alta">🟠 Alta</option>
+        <option value="critica">🔴 Crítica</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn btn-secondary flex-1" onclick="closeModal('personal-task-overlay')">Cancelar</button>
+      <button class="btn btn-primary flex-1" id="save-pt-btn" onclick="savePersonalTask()">Salvar tarefa</button>
     </div>
   </div>
 </div>
@@ -834,6 +915,7 @@ let S = {
   cards: [],
   cardComments: [], // comments for currently open card
   editingCardId: null,
+  personalTasks: [],
   view: 'board',
   search: '',
   filterUser: '',
@@ -953,7 +1035,7 @@ async function doLogout() {
   clearTimeout(searchTimer);
   teardownRealtime();
   await db.auth.signOut();
-  S = { session:null, me:null, profiles:[], cards:[], cardComments:[], editingCardId:null, view:'board', search:'', filterUser:'', filterUrgency:'', filterDateFrom:'', filterDateTo:'' };
+  S = { session:null, me:null, profiles:[], cards:[], cardComments:[], editingCardId:null, personalTasks:[], view:'board', search:'', filterUser:'', filterUrgency:'', filterDateFrom:'', filterDateTo:'' };
   showScreen('auth');
 }
 
@@ -994,6 +1076,13 @@ function setupRealtime() {
         if (data) { S.cardComments = data; renderComments(); }
       });
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'personal_tasks' }, () => {
+      _rtDebounce('personal_tasks', async () => {
+        await loadPersonalTasks();
+        updatePersonalNavCount();
+        if (S.view === 'personal') renderPersonal();
+      });
+    })
     .subscribe();
 }
 
@@ -1016,11 +1105,13 @@ async function bootApp() {
     await loadProfiles();
     await loadCards();
     await loadCurrentUser();
+    await loadPersonalTasks();
     populateFilters();
     renderSidebar();
     renderBoard();
     renderStats();
     renderSettingsProfile();
+    updatePersonalNavCount();
     if (document.getElementById('ai-key-input')) document.getElementById('ai-key-input').value = cfg.anthropicKey || '';
     showScreen('app');
     switchView('board', document.getElementById('nav-board'));
@@ -1225,6 +1316,7 @@ function switchView(view, navEl) {
   document.getElementById('view-analytics').classList.toggle('hidden', view !== 'analytics');
   document.getElementById('view-team').classList.toggle('hidden', view !== 'team');
   document.getElementById('view-settings').classList.toggle('hidden', view !== 'settings');
+  document.getElementById('view-personal').classList.toggle('hidden', view !== 'personal');
   document.getElementById('board-filters').style.display = view === 'board' ? 'flex' : 'none';
   document.getElementById('stats-row').style.display = view === 'board' ? 'flex' : 'none';
   if (view !== 'board') {
@@ -1235,11 +1327,12 @@ function switchView(view, navEl) {
     renderBoardProgress();
   }
 
-  const titles = { board: 'Quadro de Demandas', analytics: 'Analytics', team: 'Equipe', settings: 'Configurações' };
+  const titles = { board: 'Quadro de Demandas', analytics: 'Analytics', team: 'Equipe', settings: 'Configurações', personal: 'Meu Painel Pessoal' };
   document.getElementById('topbar-title').textContent = titles[view] || view;
 
   if (view === 'team') renderTeam();
   if (view === 'analytics') renderAnalytics();
+  if (view === 'personal') renderPersonal();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2371,6 +2464,225 @@ async function saveProfileColor(color) {
   renderSidebar();
   renderSettingsProfile();
   showNotif('✅ Cor atualizada!');
+}
+
+/* ═══════════════════════════════════════════════════════
+   PAINEL PESSOAL — CRUD & Render
+═══════════════════════════════════════════════════════ */
+async function loadPersonalTasks() {
+  if (!S.me?.id) return;
+  const { data, error } = await db.from('personal_tasks')
+    .select('*')
+    .eq('user_id', S.me.id)
+    .order('created_at', { ascending: false });
+  if (error) { console.warn('personal_tasks:', error.message); return; }
+  S.personalTasks = data || [];
+}
+
+function updatePersonalNavCount() {
+  const pending = S.personalTasks.filter(t => !t.done).length;
+  const count = document.getElementById('nav-count-personal');
+  if (!count) return;
+  count.textContent = pending;
+  count.style.display = pending > 0 ? '' : 'none';
+}
+
+let _editingPersonalTaskId = null;
+
+function openPersonalTaskModal(taskId) {
+  _editingPersonalTaskId = taskId;
+  const task = taskId ? S.personalTasks.find(t => t.id === taskId) : null;
+  const title = document.getElementById('pt-modal-title');
+  if (title) title.textContent = task ? 'Editar Tarefa' : 'Nova Tarefa Pessoal';
+  const ptTitle = document.getElementById('pt-title');
+  const ptDesc  = document.getElementById('pt-desc');
+  const ptPri   = document.getElementById('pt-priority');
+  if (ptTitle) ptTitle.value = task?.title || '';
+  if (ptDesc)  ptDesc.value  = task?.description || '';
+  if (ptPri)   ptPri.value   = task?.priority || 'media';
+  document.getElementById('personal-task-overlay')?.classList.add('open');
+  setTimeout(() => ptTitle?.focus(), 120);
+}
+
+async function savePersonalTask() {
+  const title       = document.getElementById('pt-title')?.value?.trim();
+  const description = document.getElementById('pt-desc')?.value?.trim() || '';
+  const priority    = document.getElementById('pt-priority')?.value || 'media';
+  if (!title) { showNotif('⚠️ Informe o título da tarefa.'); return; }
+
+  setBtnLoading('save-pt-btn', true);
+  let error;
+  if (_editingPersonalTaskId) {
+    ({ error } = await db.from('personal_tasks')
+      .update({ title, description, priority, updated_at: new Date().toISOString() })
+      .eq('id', _editingPersonalTaskId)
+      .eq('user_id', S.me.id));
+  } else {
+    ({ error } = await db.from('personal_tasks')
+      .insert({ title, description, priority, done: false, user_id: S.me.id }));
+  }
+  setBtnLoading('save-pt-btn', false);
+  if (error) { showNotif('❌ Erro: ' + error.message); return; }
+
+  closeModal('personal-task-overlay');
+  await loadPersonalTasks();
+  updatePersonalNavCount();
+  renderPersonal();
+  showNotif(_editingPersonalTaskId ? '✅ Tarefa atualizada!' : '✅ Tarefa criada!');
+}
+
+async function togglePersonalTask(taskId) {
+  const task = S.personalTasks.find(t => t.id === taskId);
+  if (!task) return;
+  const newDone = !task.done;
+  task.done = newDone; // optimistic
+  renderPersonal();
+  updatePersonalNavCount();
+  const { error } = await db.from('personal_tasks')
+    .update({ done: newDone, updated_at: new Date().toISOString() })
+    .eq('id', taskId)
+    .eq('user_id', S.me.id);
+  if (error) {
+    task.done = !newDone; // revert
+    renderPersonal();
+    updatePersonalNavCount();
+    showNotif('❌ Erro ao atualizar tarefa.');
+  }
+}
+
+async function deletePersonalTask(taskId) {
+  if (!confirm('Remover esta tarefa do seu painel pessoal?')) return;
+  const { error } = await db.from('personal_tasks')
+    .delete()
+    .eq('id', taskId)
+    .eq('user_id', S.me.id);
+  if (error) { showNotif('❌ Erro ao remover: ' + error.message); return; }
+  S.personalTasks = S.personalTasks.filter(t => t.id !== taskId);
+  updatePersonalNavCount();
+  renderPersonal();
+  showNotif('✅ Tarefa removida.');
+}
+
+const PT_PRIORITIES = [
+  { id: 'critica', label: '🔴 Crítica', color: '#FF453A' },
+  { id: 'alta',    label: '🟠 Alta',    color: '#FF9F0A' },
+  { id: 'media',   label: '🟡 Média',   color: '#FFD60A' },
+  { id: 'baixa',   label: '🟢 Baixa',   color: '#30D158' },
+];
+
+function renderPersonalTaskHtml(t) {
+  const editIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+  const trashIcon = `<svg width="13" height="13"><use href="#ic-trash"/></svg>`;
+  return `
+  <div class="personal-task-item${t.done ? ' pt-done' : ''}" data-pt-id="${esc(t.id)}">
+    <label class="pt-check-label" title="${t.done ? 'Marcar como pendente' : 'Marcar como concluída'}">
+      <input type="checkbox" ${t.done ? 'checked' : ''} onchange="togglePersonalTask('${esc(t.id)}')">
+      <span class="pt-check-box"></span>
+    </label>
+    <div class="pt-content">
+      <div class="pt-title">${esc(t.title)}</div>
+      ${t.description ? `<div class="pt-desc">${esc(t.description)}</div>` : ''}
+    </div>
+    <div class="pt-actions">
+      <button class="btn btn-icon" onclick="openPersonalTaskModal('${esc(t.id)}')" title="Editar">${editIcon}</button>
+      <button class="btn btn-icon" onclick="deletePersonalTask('${esc(t.id)}')" title="Remover" style="color:var(--danger)">${trashIcon}</button>
+    </div>
+  </div>`;
+}
+
+function renderPersonal() {
+  const tasks   = S.personalTasks;
+  const total   = tasks.length;
+  const done    = tasks.filter(t => t.done).length;
+  const pending = total - done;
+  const pct     = total ? Math.round(done / total * 100) : 0;
+
+  /* ── Analytics section ── */
+  const analyticsEl = document.getElementById('personal-analytics-section');
+  if (analyticsEl) {
+    const priBreak = PT_PRIORITIES.map(p => {
+      const cnt = tasks.filter(t => t.priority === p.id).length;
+      const pctP = total ? Math.round(cnt / total * 100) : 0;
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">
+          <span>${p.label}</span>
+          <span style="color:${p.color};font-weight:700">${cnt} <span style="color:var(--label3);font-weight:400">(${pctP}%)</span></span>
+        </div>
+        <div class="progress-track" style="height:5px">
+          <div style="height:100%;width:${pctP}%;background:${p.color};border-radius:99px;transition:width 0.8s ease"></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    analyticsEl.innerHTML = `
+      <div class="personal-kpi-grid">
+        <div class="analytics-card personal-kpi">
+          <div class="personal-kpi-label">TOTAL</div>
+          <div class="personal-kpi-val">${total}</div>
+          <div class="personal-kpi-sub">tarefas</div>
+        </div>
+        <div class="analytics-card personal-kpi">
+          <div class="personal-kpi-label">CONCLUÍDAS</div>
+          <div class="personal-kpi-val" style="color:var(--success)">${done}</div>
+          <div class="personal-kpi-sub" style="color:var(--success)">${pct}% do total</div>
+        </div>
+        <div class="analytics-card personal-kpi">
+          <div class="personal-kpi-label">PENDENTES</div>
+          <div class="personal-kpi-val" style="color:${pending > 0 ? 'var(--warning)' : 'var(--label3)'}">${pending}</div>
+          <div class="personal-kpi-sub">em aberto</div>
+        </div>
+        <div class="analytics-card personal-kpi">
+          <div class="personal-kpi-label">PROGRESSO</div>
+          <div class="personal-kpi-val" style="color:var(--accent)">${pct}<span style="font-size:16px">%</span></div>
+          <div class="personal-kpi-sub">${done}/${total} feitas</div>
+        </div>
+      </div>
+      <div class="analytics-card" style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="font-size:15px;font-weight:700;font-family:var(--font-display)">Progresso Geral</div>
+          <div style="font-size:11px;color:var(--label3)">${done} de ${total} concluídas</div>
+        </div>
+        <div class="progress-track" style="margin-bottom:18px">
+          <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),var(--success));border-radius:99px;transition:width 1s var(--ease-spring)"></div>
+        </div>
+        <div style="font-size:14px;font-weight:600;font-family:var(--font-display);margin-bottom:12px;color:var(--label2)">Por Prioridade</div>
+        ${priBreak}
+      </div>`;
+  }
+
+  /* ── Tasks list ── */
+  const tasksEl = document.getElementById('personal-tasks-content');
+  if (!tasksEl) return;
+
+  if (total === 0) {
+    tasksEl.innerHTML = `
+      <div class="personal-empty">
+        <div class="personal-empty-icon">📋</div>
+        <div class="personal-empty-text">Seu painel pessoal está vazio</div>
+        <div class="personal-empty-sub">Crie tarefas privadas para organizar suas demandas pessoais.</div>
+        <button class="btn btn-primary" onclick="openPersonalTaskModal(null)">
+          <svg width="13" height="13" style="margin-right:6px"><use href="#ic-plus"/></svg>Criar primeira tarefa
+        </button>
+      </div>`;
+    return;
+  }
+
+  tasksEl.innerHTML = PT_PRIORITIES.map(p => {
+    const pTasks = tasks.filter(t => t.priority === p.id);
+    if (pTasks.length === 0) return '';
+    const donePri = pTasks.filter(t => t.done).length;
+    return `
+      <div class="personal-group">
+        <div class="personal-group-header">
+          <div class="personal-group-indicator" style="background:${p.color}"></div>
+          <div class="personal-group-title">${p.label}</div>
+          <div class="personal-group-count">${donePri}/${pTasks.length}</div>
+        </div>
+        <div class="personal-task-list">
+          ${pTasks.map(t => renderPersonalTaskHtml(t)).join('')}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 /* ═══════════════════════════════════════════════════════
