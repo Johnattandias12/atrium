@@ -625,46 +625,76 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
 
     <!-- PAINEL PESSOAL VIEW -->
     <div id="view-personal" class="personal-wrap hidden">
+
       <!-- Header -->
       <div class="personal-header">
-        <div>
-          <h2 class="personal-title">Meu Painel <span class="personal-title-badge">🔒 Privado</span></h2>
-        </div>
+        <h2 class="personal-title">Meu Painel <span class="personal-title-badge">🔒 Privado</span></h2>
         <button class="btn btn-primary pt-btn-add" onclick="openPersonalTaskModal(null)">
           <svg width="14" height="14" style="flex-shrink:0"><use href="#ic-plus"/></svg>Nova tarefa
         </button>
       </div>
-      <!-- Reminder banner (rendered by JS) -->
-      <div id="pt-reminder-banner"></div>
-      <!-- Analytics -->
+
+      <!-- Alert carousel (renderizado por JS) -->
+      <div id="pt-alert-section"></div>
+
+      <!-- Analytics KPIs -->
       <div id="personal-analytics-section"></div>
+
       <!-- Filter bar -->
-      <div class="pt-filter-bar" id="pt-filter-bar">
-        <div class="pt-status-tabs">
-          <button class="pt-tab active" id="ptf-all"     onclick="setPtFilter('status','all')">Todas</button>
-          <button class="pt-tab"        id="ptf-pending" onclick="setPtFilter('status','pending')">Pendentes</button>
-          <button class="pt-tab"        id="ptf-done"    onclick="setPtFilter('status','done')">Concluídas</button>
+      <div class="pt-filterbar" id="pt-filterbar">
+        <div class="pt-filterbar-top">
+          <!-- Status pills -->
+          <div class="pt-status-tabs">
+            <button class="pt-tab active" id="ptf-all"     onclick="setPtFilter('status','all')">Todas</button>
+            <button class="pt-tab"        id="ptf-pending" onclick="setPtFilter('status','pending')">Pendentes</button>
+            <button class="pt-tab"        id="ptf-done"    onclick="setPtFilter('status','done')">Concluídas</button>
+          </div>
+          <!-- Filter toggle + clear -->
+          <div class="pt-filterbar-right">
+            <button class="pt-filter-toggle-btn" id="ptf-toggle-btn" onclick="togglePtFilterPanel()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+              Filtrar
+              <span class="pt-filter-badge hidden" id="pt-filter-badge">0</span>
+            </button>
+            <button class="pt-clear-btn hidden" id="pt-clear-all-btn" onclick="clearAllPtFilters()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              Limpar
+            </button>
+          </div>
         </div>
-        <div class="pt-filter-extras" id="pt-filter-extras">
-          <select class="pt-filter-select" id="ptf-priority" onchange="setPtFilter('priority',this.value)">
-            <option value="">Prioridade</option>
-            <option value="critica">🔴 Crítica</option>
-            <option value="alta">🟠 Alta</option>
-            <option value="media">🟡 Média</option>
-            <option value="baixa">🟢 Baixa</option>
-          </select>
-          <button class="pt-filter-date-toggle" id="ptf-date-btn" onclick="togglePtDateFilter()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            Período
-          </button>
-        </div>
-        <div class="pt-date-range hidden" id="pt-date-range">
-          <input type="date" class="pt-date-input" id="ptf-from" onchange="setPtFilter('dateFrom',this.value)" placeholder="De">
-          <span class="pt-date-sep">→</span>
-          <input type="date" class="pt-date-input" id="ptf-to" onchange="setPtFilter('dateTo',this.value)" placeholder="Até">
-          <button class="pt-date-clear" onclick="clearPtDateFilter()" title="Limpar datas">✕</button>
+
+        <!-- Expandable filter panel -->
+        <div class="pt-filter-panel hidden" id="pt-filter-panel">
+          <div class="pt-filter-section">
+            <div class="pt-filter-label">Prioridade</div>
+            <div class="pt-priority-chips">
+              <button class="pt-chip active" id="ptc-pri-all"     onclick="setPtFilter('priority','')">Todas</button>
+              <button class="pt-chip"        id="ptc-pri-critica" onclick="setPtFilter('priority','critica')">🔴 Crítica</button>
+              <button class="pt-chip"        id="ptc-pri-alta"    onclick="setPtFilter('priority','alta')">🟠 Alta</button>
+              <button class="pt-chip"        id="ptc-pri-media"   onclick="setPtFilter('priority','media')">🟡 Média</button>
+              <button class="pt-chip"        id="ptc-pri-baixa"   onclick="setPtFilter('priority','baixa')">🟢 Baixa</button>
+            </div>
+          </div>
+          <div class="pt-filter-section" style="border-bottom:none;padding-bottom:0">
+            <div class="pt-filter-label">Período (prazo)</div>
+            <div class="pt-date-row">
+              <div class="pt-date-field">
+                <label class="pt-date-label">De</label>
+                <input type="date" class="pt-date-input" id="ptf-from" onchange="setPtFilter('dateFrom',this.value)">
+              </div>
+              <div class="pt-date-sep-icon">→</div>
+              <div class="pt-date-field">
+                <label class="pt-date-label">Até</label>
+                <input type="date" class="pt-date-input" id="ptf-to" onchange="setPtFilter('dateTo',this.value)">
+              </div>
+              <button class="pt-date-clear-btn" id="pt-date-clear-btn" onclick="clearPtDateFilter()" title="Limpar período">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+
       <!-- Tasks list -->
       <div id="personal-tasks-content"></div>
     </div><!-- end view-personal -->
@@ -2542,6 +2572,7 @@ function updatePersonalNavCount() {
 
 let _editingPersonalTaskId = null;
 let _ptFilter = { status: 'all', priority: '', dateFrom: '', dateTo: '' };
+let _ptFilterPanelOpen = false;
 
 function openPersonalTaskModal(taskId) {
   _editingPersonalTaskId = taskId;
@@ -2560,34 +2591,61 @@ function openPersonalTaskModal(taskId) {
   setTimeout(() => ptTitle?.focus(), 120);
 }
 
-function setPtFilter(key, val) {
-  _ptFilter[key] = val;
-  if (key === 'status') {
-    ['all','pending','done'].forEach(id => {
-      document.getElementById('ptf-' + id)?.classList.toggle('active', id === val);
-    });
-  }
-  renderPersonal();
+/* ── Filter helpers ── */
+function _ptActiveFilterCount() {
+  return [_ptFilter.priority, _ptFilter.dateFrom, _ptFilter.dateTo].filter(Boolean).length;
 }
 
-function togglePtDateFilter() {
-  const wrap = document.getElementById('pt-date-range');
-  const btn  = document.getElementById('ptf-date-btn');
-  if (!wrap) return;
-  const open = !wrap.classList.contains('hidden');
-  wrap.classList.toggle('hidden', open);
-  if (btn) btn.classList.toggle('active', !open);
-  if (open) { clearPtDateFilter(); }
+function _syncPtFilterUI() {
+  // Status tabs
+  ['all','pending','done'].forEach(id => {
+    document.getElementById('ptf-' + id)?.classList.toggle('active', id === _ptFilter.status);
+  });
+  // Priority chips
+  const priMap = { '': 'all', 'critica': 'critica', 'alta': 'alta', 'media': 'media', 'baixa': 'baixa' };
+  Object.entries(priMap).forEach(([val, id]) => {
+    document.getElementById('ptc-pri-' + id)?.classList.toggle('active', _ptFilter.priority === val);
+  });
+  // Date inputs
+  const fEl = document.getElementById('ptf-from');
+  const tEl = document.getElementById('ptf-to');
+  if (fEl) fEl.value = _ptFilter.dateFrom;
+  if (tEl) tEl.value = _ptFilter.dateTo;
+  // Date clear button visibility
+  const hasDates = _ptFilter.dateFrom || _ptFilter.dateTo;
+  document.getElementById('pt-date-clear-btn')?.classList.toggle('hidden', !hasDates);
+  // Filter badge & clear-all button
+  const count = _ptActiveFilterCount();
+  const badge = document.getElementById('pt-filter-badge');
+  if (badge) { badge.textContent = count; badge.classList.toggle('hidden', count === 0); }
+  document.getElementById('pt-clear-all-btn')?.classList.toggle('hidden', count === 0 && _ptFilter.status === 'all');
+  // Filter toggle button active state
+  document.getElementById('ptf-toggle-btn')?.classList.toggle('active', _ptFilterPanelOpen || count > 0);
+}
+
+function setPtFilter(key, val) {
+  _ptFilter[key] = val;
+  _syncPtFilterUI();
+  if (S.personalTableReady) renderPersonalTasks();
+}
+
+function togglePtFilterPanel() {
+  _ptFilterPanelOpen = !_ptFilterPanelOpen;
+  document.getElementById('pt-filter-panel')?.classList.toggle('hidden', !_ptFilterPanelOpen);
+  document.getElementById('ptf-toggle-btn')?.classList.toggle('active', _ptFilterPanelOpen || _ptActiveFilterCount() > 0);
 }
 
 function clearPtDateFilter() {
   _ptFilter.dateFrom = '';
   _ptFilter.dateTo   = '';
-  const f = document.getElementById('ptf-from');
-  const t = document.getElementById('ptf-to');
-  if (f) f.value = '';
-  if (t) t.value = '';
-  renderPersonal();
+  _syncPtFilterUI();
+  renderPersonalTasks();
+}
+
+function clearAllPtFilters() {
+  _ptFilter = { status: 'all', priority: '', dateFrom: '', dateTo: '' };
+  _syncPtFilterUI();
+  renderPersonalTasks();
 }
 
 function _getFilteredPersonalTasks() {
@@ -2598,6 +2656,68 @@ function _getFilteredPersonalTasks() {
   if (_ptFilter.dateFrom) tasks = tasks.filter(t => t.deadline && t.deadline >= _ptFilter.dateFrom);
   if (_ptFilter.dateTo)   tasks = tasks.filter(t => t.deadline && t.deadline <= _ptFilter.dateTo);
   return tasks;
+}
+
+/* ── Alert carousel ── */
+function _ptDaysLabel(deadline) {
+  const today  = new Date(todayStr());
+  const due    = new Date(deadline);
+  const diff   = Math.round((due - today) / 86400000);
+  if (diff < 0)  return { text: diff === -1 ? 'Atrasado há 1 dia' : `Atrasado há ${Math.abs(diff)} dias`, cls: 'alert-overdue' };
+  if (diff === 0) return { text: 'Vence hoje!', cls: 'alert-today' };
+  if (diff === 1) return { text: 'Vence amanhã', cls: 'alert-soon' };
+  return { text: `Vence em ${diff} dias`, cls: 'alert-soon' };
+}
+
+function renderPtAlerts() {
+  const el = document.getElementById('pt-alert-section');
+  if (!el) return;
+  const today   = todayStr();
+  const soon3   = new Date(); soon3.setDate(soon3.getDate() + 3);
+  const soonStr = soon3.toISOString().slice(0, 10);
+
+  const alerts = S.personalTasks.filter(t =>
+    !t.done && t.deadline && t.deadline <= soonStr
+  ).sort((a, b) => a.deadline.localeCompare(b.deadline));
+
+  if (alerts.length === 0) { el.innerHTML = ''; return; }
+
+  const priColors = { critica:'#FF453A', alta:'#FF9F0A', media:'#FFD60A', baixa:'#30D158' };
+
+  const cards = alerts.map(t => {
+    const { text, cls } = _ptDaysLabel(t.deadline);
+    const color = priColors[t.priority] || '#888';
+    const isOverdue = t.deadline < today;
+    return `
+      <div class="pt-alert-card ${cls}" onclick="openPersonalTaskModal('${esc(t.id)}')">
+        <div class="pt-alert-bar" style="background:${color}"></div>
+        <div class="pt-alert-body">
+          <div class="pt-alert-time ${cls}">${text}</div>
+          <div class="pt-alert-title">${esc(t.title)}</div>
+          <div class="pt-alert-meta">
+            <span class="pt-alert-pri" style="color:${color}">${URGENCY_LABELS[t.priority]}</span>
+            ${isOverdue ? '<span class="pt-alert-overdue-tag">!</span>' : ''}
+          </div>
+        </div>
+        <div class="pt-alert-cta">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </div>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="pt-alerts-section">
+      <div class="pt-alerts-header">
+        <div class="pt-alerts-title">
+          <div class="pt-alert-pulse-dot"></div>
+          ${alerts.some(t => t.deadline < today) ? '⚠️ Atenção — prazos' : '⏰ Prazos próximos'}
+        </div>
+        <span class="pt-alerts-count">${alerts.length}</span>
+      </div>
+      <div class="pt-alerts-carousel">
+        ${cards}
+      </div>
+    </div>`;
 }
 
 async function savePersonalTask() {
@@ -2756,32 +2876,17 @@ async function retryPersonalSetup() {
 }
 
 function renderPersonal() {
-  const allTasks  = S.personalTasks;
-  const tasks     = _getFilteredPersonalTasks();
-  const total     = allTasks.length;
-  const done      = allTasks.filter(t => t.done).length;
-  const pending   = total - done;
-  const pct       = total ? Math.round(done / total * 100) : 0;
+  const allTasks = S.personalTasks;
+  const total    = allTasks.length;
+  const done     = allTasks.filter(t => t.done).length;
+  const pending  = total - done;
+  const pct      = total ? Math.round(done / total * 100) : 0;
 
-  /* ── Reminder banner ── */
-  const bannerEl = document.getElementById('pt-reminder-banner');
-  if (bannerEl) {
-    const today   = todayStr();
-    const soon3   = new Date(); soon3.setDate(soon3.getDate() + 3);
-    const soonStr = soon3.toISOString().slice(0, 10);
-    const overdueList = allTasks.filter(t => !t.done && t.deadline && t.deadline < today);
-    const soonList    = allTasks.filter(t => !t.done && t.deadline && t.deadline >= today && t.deadline <= soonStr);
-    if (overdueList.length > 0 || soonList.length > 0) {
-      let parts = [];
-      if (overdueList.length > 0) parts.push(`⚠️ <strong>${overdueList.length}</strong> tarefa${overdueList.length > 1 ? 's' : ''} em atraso`);
-      if (soonList.length > 0)    parts.push(`⏰ <strong>${soonList.length}</strong> vence${soonList.length > 1 ? 'm' : ''} em até 3 dias`);
-      bannerEl.innerHTML = `<div class="pt-reminder-banner"><div class="pt-reminder-dot"></div><div class="pt-reminder-text">${parts.join(' &nbsp;·&nbsp; ')}</div></div>`;
-    } else {
-      bannerEl.innerHTML = '';
-    }
-  }
+  /* ── Alert carousel ── */
+  renderPtAlerts();
+  _syncPtFilterUI();
 
-  /* ── Migration card when table doesn't exist ── */
+  /* ── Migration card ── */
   const analyticsEl = document.getElementById('personal-analytics-section');
   if (!S.personalTableReady) {
     if (analyticsEl) {
@@ -2795,7 +2900,7 @@ function renderPersonal() {
             A tabela <code style="background:var(--fill2);padding:1px 6px;border-radius:4px;font-family:var(--font-mono);font-size:11px">personal_tasks</code> ainda não existe no seu banco Supabase.
             Copie o SQL abaixo, acesse <strong>Supabase → SQL Editor → New query</strong>, cole e clique em <strong>Run</strong>.
           </div>
-          <div class="personal-migration-sql" id="migration-sql-block">${_PERSONAL_MIGRATION_SQL}</div>
+          <div class="personal-migration-sql">${_PERSONAL_MIGRATION_SQL}</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
             <button class="btn btn-primary btn-sm" onclick="_copyMigrationSql()">📋 Copiar SQL</button>
             <button class="btn btn-secondary btn-sm" onclick="retryPersonalSetup()">🔄 Já executei — Tentar novamente</button>
@@ -2807,11 +2912,10 @@ function renderPersonal() {
     return;
   }
 
-  /* ── Analytics section ── */
-  if (!analyticsEl) return;
-  {
+  /* ── Analytics KPIs ── */
+  if (analyticsEl) {
     const priBreak = PT_PRIORITIES.map(p => {
-      const cnt = tasks.filter(t => t.priority === p.id).length;
+      const cnt  = allTasks.filter(t => t.priority === p.id).length;
       const pctP = total ? Math.round(cnt / total * 100) : 0;
       return `<div style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">
@@ -2860,25 +2964,42 @@ function renderPersonal() {
       </div>`;
   }
 
-  /* ── Tasks list ── */
-  const tasksEl = document.getElementById('personal-tasks-content');
-  if (!tasksEl) return;
+  /* ── Task list (filtered) ── */
+  renderPersonalTasks();
+}
 
-  if (total === 0) {
+function renderPersonalTasks() {
+  const tasksEl  = document.getElementById('personal-tasks-content');
+  if (!tasksEl) return;
+  const allTasks = S.personalTasks;
+  const filtered = _getFilteredPersonalTasks();
+
+  if (allTasks.length === 0) {
     tasksEl.innerHTML = `
       <div class="personal-empty">
         <div class="personal-empty-icon">📋</div>
         <div class="personal-empty-text">Seu painel pessoal está vazio</div>
         <div class="personal-empty-sub">Crie tarefas privadas para organizar suas demandas pessoais.</div>
-        <button class="btn btn-primary" onclick="openPersonalTaskModal(null)">
+        <button class="btn btn-primary pt-btn-lg" onclick="openPersonalTaskModal(null)">
           <svg width="13" height="13" style="margin-right:6px"><use href="#ic-plus"/></svg>Criar primeira tarefa
         </button>
       </div>`;
     return;
   }
 
+  if (filtered.length === 0) {
+    tasksEl.innerHTML = `
+      <div class="personal-empty">
+        <div class="personal-empty-icon">🔍</div>
+        <div class="personal-empty-text">Nenhuma tarefa encontrada</div>
+        <div class="personal-empty-sub">Tente ajustar os filtros aplicados.</div>
+        <button class="btn btn-secondary pt-btn-lg" onclick="clearAllPtFilters()">Limpar filtros</button>
+      </div>`;
+    return;
+  }
+
   tasksEl.innerHTML = PT_PRIORITIES.map(p => {
-    const pTasks = tasks.filter(t => t.priority === p.id);
+    const pTasks  = filtered.filter(t => t.priority === p.id);
     if (pTasks.length === 0) return '';
     const donePri = pTasks.filter(t => t.done).length;
     return `
