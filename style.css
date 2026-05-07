@@ -1210,141 +1210,258 @@ input[type="date"] { color-scheme: dark; }
 .toggle.on { background:var(--accent); }
 .toggle.on::after { transform:translateX(18px); }
 
-/* ═══ MOBILE ═══ */
+/* ═══ MOBILE — iPhone 16 Pro Max (430px) e demais ═══ */
 @media (max-width: 768px) {
 
-  /* ── Bottom navigation bar ── */
+  /* ══════════════════════════════════════════
+     BOTTOM NAVIGATION BAR
+     Fix crítico: .sidebar-section usava flex-column dentro do flex-row do sidebar,
+     causando os nav-items empilharem verticalmente e se sobreporem.
+     display:contents "dissolve" as seções tornando os nav-items filhos diretos
+     do sidebar (flex-row), distribuindo-os corretamente.
+  ══════════════════════════════════════════ */
   .sidebar {
-    width:100%; height:calc(60px + env(safe-area-inset-bottom));
-    border-top:1px solid var(--separator); border-right:none;
-    position:fixed; bottom:0; left:0; z-index:100;
-    flex-direction:row; padding:0 4px;
-    padding-bottom:env(safe-area-inset-bottom);
-    justify-content:space-around; align-items:center;
-    backdrop-filter:blur(40px) saturate(200%); -webkit-backdrop-filter:blur(40px) saturate(200%);
-    overflow:visible;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    width: 100%;
+    height: calc(60px + env(safe-area-inset-bottom));
+    flex-direction: row;
+    align-items: stretch;
+    padding: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-top: 1px solid var(--separator);
+    border-right: none;
+    z-index: 100;
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    overflow: visible;
   }
-  :root[data-theme="light"] .sidebar { background:rgba(255,255,255,0.94); }
+  :root[data-theme="light"] .sidebar { background: rgba(250,250,250,0.96); }
 
-  .sidebar-brand-wrap, .sidebar-spacer,
-  .sidebar-profile, .sidebar-logout-btn,
-  .sidebar-section-label { display:none; }
+  /* Dissolve as seções — nav-items viram filhos diretos do sidebar */
+  .sidebar-section { display: contents; }
 
+  /* Ocultar elementos decorativos do desktop */
+  .sidebar-brand-wrap,
+  .sidebar-spacer,
+  .sidebar-section-label,
+  .sidebar-profile,
+  .sidebar-logout-btn { display: none !important; }
+
+  /* Nav items: coluna, distribuição igual */
   .nav-item {
-    flex-direction:column; padding:6px 4px 8px; gap:3px;
-    justify-content:center; align-items:center;
-    border-radius:var(--radius-sm);
-    flex:1; min-width:0; color:var(--label3); min-height:52px;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px 6px;
+    min-height: 60px;
+    max-height: 60px;
+    border-radius: 0;
+    min-width: 0;
+    color: var(--label3);
+    background: transparent;
+    position: relative;
+    transition: color 0.18s;
+    overflow: hidden;
   }
-  .nav-item.active { background:var(--accent-dim); color:var(--accent); }
-  .nav-item .nav-count { display:none; }
+
+  /* Active: pill ao redor do ícone */
+  .nav-item.active { background: transparent; color: var(--accent); }
+  .nav-item.active .nav-icon-wrap {
+    background: var(--accent-dim);
+    border-radius: 99px;
+  }
+  :root[data-theme="light"] .nav-item.active .nav-icon-wrap {
+    background: rgba(0,98,255,0.1);
+  }
+
+  /* Ocultar badge de contagem no mobile */
+  .nav-item .nav-count { display: none; }
+
+  /* Ícone */
+  .nav-icon-wrap {
+    width: 40px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.18s;
+    border-radius: 99px;
+  }
+  .nav-icon-wrap svg { width: 22px; height: 22px; display: block; }
+
+  /* Label */
   .nav-item .nav-label {
-    font-size:9px; font-weight:700; letter-spacing:0.3px;
-    text-transform:uppercase; white-space:nowrap;
-    overflow:hidden; text-overflow:ellipsis; max-width:100%;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0;
+    font-family: var(--font);
+    text-transform: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    padding: 0 2px;
+    line-height: 1;
   }
-  .nav-icon-wrap { width:22px; height:22px; flex-shrink:0; }
-  .nav-icon-wrap svg { width:20px; height:20px; }
 
-  /* ── Main content: pad bottom for nav ── */
-  .main { padding-bottom:calc(60px + env(safe-area-inset-bottom)); }
+  /* ══════════════════════════════════════════
+     MAIN CONTENT
+  ══════════════════════════════════════════ */
+  .main {
+    margin-left: 0;
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+    width: 100%;
+    min-width: 0;
+  }
 
-  /* ── Topbar: two-row layout on mobile ── */
+  /* Ticker: oculto no mobile (economiza 32px de altura) */
+  .ticker-wrap { display: none; }
+
+  /* ══════════════════════════════════════════
+     TOPBAR
+  ══════════════════════════════════════════ */
   .topbar {
-    height:auto; min-height:52px;
-    padding:10px 14px 0;
-    flex-wrap:wrap; align-items:center;
-    gap:0; position:relative;
+    height: auto;
+    min-height: 54px;
+    padding: 10px 14px 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0;
+    position: relative;
+    border-bottom: 1px solid var(--separator);
   }
-  .topbar-title { font-size:17px; font-weight:800; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .topbar-spacer { display:none; }
+  .topbar-title {
+    font-size: 18px;
+    font-weight: 800;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .topbar-spacer { display: none; }
 
-  /* Board filters: full-width row below the title */
+  /* Board filters: faixa abaixo do título */
   #board-filters {
-    width:100%;
-    padding:8px 0 10px;
-    gap:6px;
-    align-items:center;
-    flex-wrap:nowrap;
-    overflow:hidden;
+    width: 100%;
+    padding: 8px 0 6px;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow: hidden;
   }
-  /* Filter selects hidden on mobile — too cramped */
-  #board-filters .filter-select { display:none !important; }
-  /* Date filter toggle also hidden */
-  .date-filter-toggle { display:none; }
-  .date-filter-wrap   { display:none !important; }
-  /* Search: grows to fill space */
+  #board-filters .filter-select { display: none !important; }
+  .date-filter-toggle { display: none; }
+  .date-filter-wrap   { display: none !important; }
+
   .search-input {
-    flex:1; width:auto !important; min-width:0;
-    border-radius:10px;
+    flex: 1;
+    width: auto !important;
+    min-width: 0;
+    border-radius: 10px;
   }
   .search-input:focus-within {
-    position:static; width:auto !important; flex:1;
-    background:var(--surface2); box-shadow:0 0 0 3px var(--accent-dim);
+    position: static;
+    width: auto !important;
+    flex: 1;
+    background: var(--surface2);
+    box-shadow: 0 0 0 3px var(--accent-dim);
   }
-  /* + Nova demanda button: compact */
   #board-filters > .btn.btn-primary {
-    flex-shrink:0; padding:0 14px;
-    font-size:12.5px; height:34px; white-space:nowrap;
+    flex-shrink: 0;
+    padding: 0 14px;
+    font-size: 13px;
+    height: 36px;
+    white-space: nowrap;
   }
 
-  /* ── Board: horizontal scroll-snap columns ── */
-  .board-container { padding:14px; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; }
-  .board { gap:12px; }
-  .column { width:88vw; max-width:360px; scroll-snap-align:center; }
+  /* ══════════════════════════════════════════
+     BOARD KANBAN
+  ══════════════════════════════════════════ */
+  .board-container {
+    padding: 12px;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+  }
+  .board { gap: 10px; }
+  .column {
+    width: calc(100vw - 48px);
+    max-width: 380px;
+    scroll-snap-align: center;
+    flex-shrink: 0;
+  }
 
-  /* ── Stat/progress bars: hidden on mobile ── */
-  .live-stats { display:none; }
-  .stats-row  { display:none; }
-  .board-progress-bar { display:none; }
-  .card-num-badge     { display:none; }
+  /* Stat bars: ocultos no mobile */
+  .live-stats        { display: none; }
+  .stats-row         { display: none; }
+  .board-progress-bar{ display: none; }
+  .card-num-badge    { display: none; }
 
-  /* ── Overdue banner: compact ── */
-  .overdue-banner { padding:8px 14px; }
+  /* Overdue banner */
+  .overdue-banner { padding: 8px 14px; font-size: 13px; }
 
-  /* ── Drawer: full-width bottom sheet ── */
+  /* ══════════════════════════════════════════
+     DRAWER / BOTTOM SHEET
+  ══════════════════════════════════════════ */
   .drawer {
-    width:100vw; border-left:none; border-radius:20px 20px 0 0;
-    transform:translateY(100%); transition:transform 0.4s var(--ease-spring);
-    border-top:1px solid var(--separator); height:92svh; z-index:200;
-    max-height:92vh; overflow:hidden;
+    width: 100vw;
+    border-left: none;
+    border-radius: 20px 20px 0 0;
+    transform: translateY(100%);
+    transition: transform 0.4s var(--ease-spring);
+    border-top: 1px solid var(--separator);
+    height: 92svh;
+    max-height: 92svh;
+    z-index: 200;
+    overflow: hidden;
   }
-  .overlay.open .drawer { transform:translateY(0); }
-  .drawer-body { padding:16px; }
+  .overlay.open .drawer { transform: translateY(0); }
+  .drawer-body { padding: 16px 16px 32px; }
 
-  /* ── Settings & Team pages ── */
-  .settings-wrap { max-width:100%; padding:12px; }
-  .team-wrap     { max-width:100%; padding:12px; }
-  .app-footer    { display:none; }
-  .wizard-card, .auth-card { padding:22px 18px; }
-  .auth-card { border-radius:var(--radius-lg); }
-  .live-stats { top:14px; right:14px; }
-  .grid2 { grid-template-columns:1fr; }
+  /* ══════════════════════════════════════════
+     SETTINGS, TEAM, ANALYTICS
+  ══════════════════════════════════════════ */
+  .settings-wrap { max-width: 100%; padding: 12px 14px calc(60px + env(safe-area-inset-bottom) + 16px); }
+  .team-wrap     { max-width: 100%; padding: 12px 14px calc(60px + env(safe-area-inset-bottom) + 16px); }
+  #view-analytics { padding: 14px 14px 20px !important; }
+  .app-footer { display: none; }
+  .wizard-card, .auth-card { padding: 22px 18px; }
+  .auth-card { border-radius: var(--radius-lg); }
+  .live-stats { top: 14px; right: 14px; }
+  .grid2 { grid-template-columns: 1fr; }
 
-  /* ── Profile card: stack vertically on mobile ── */
+  /* Analytics KPI grid: 2 colunas no mobile */
+  .analytics-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+
+  /* ── Profile card ── */
   .profile-card {
-    flex-direction:column; align-items:center;
-    text-align:center; gap:12px; padding:20px 16px;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 12px;
+    padding: 20px 16px;
   }
-  .profile-info { width:100%; text-align:center; }
-  .profile-name { font-size:16px; }
-  .profile-meta { justify-content:center; }
-  .profile-actions { justify-content:center; }
-  /* Edit block: single column on mobile */
-  .profile-edit-block .grid2 { grid-template-columns:1fr; }
+  .profile-info { width: 100%; text-align: center; }
+  .profile-name { font-size: 16px; }
+  .profile-meta { justify-content: center; }
+  .profile-actions { justify-content: center; }
+  .profile-edit-block .grid2 { grid-template-columns: 1fr; }
 
-  /* ── Settings row: wrap on very small screens ── */
-  .settings-row { flex-wrap:wrap; gap:8px; }
-  .settings-row-info { min-width:0; }
+  /* Settings rows */
+  .settings-row { flex-wrap: wrap; gap: 8px; }
+  .settings-row-info { min-width: 0; flex: 1; }
 
-  /* ── Notification toast: above bottom nav ── */
-  #notif { bottom:calc(68px + env(safe-area-inset-bottom)); }
-
-  /* ── Mobile logout button (shown in settings) ── */
-  .mobile-only-logout { display:flex !important; }
-
-  /* ── Mobile filter button (shown on mobile) ── */
-  .mobile-filter-btn { display:flex; }
+  /* ══════════════════════════════════════════
+     NOTIFICAÇÕES E EXTRAS
+  ══════════════════════════════════════════ */
+  #notif { bottom: calc(70px + env(safe-area-inset-bottom)); }
+  .mobile-only-logout { display: flex !important; }
+  .mobile-filter-btn  { display: flex; }
+  .filter-badge { display: flex; }
 
 }
 
@@ -1475,7 +1592,7 @@ input[type="date"] { color-scheme: dark; }
 
 /* ─── Mobile overrides ─── */
 @media (max-width:768px) {
-  .personal-wrap { padding:12px 12px 88px; max-width:100%; margin:0; }
+  .personal-wrap { padding:12px 14px calc(60px + env(safe-area-inset-bottom) + 20px); max-width:100%; margin:0; }
   .personal-title { font-size:18px; }
   .pt-btn-add { min-height:46px; font-size:14px; }
   .personal-kpi-grid { grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:10px; }
