@@ -625,17 +625,47 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
 
     <!-- PAINEL PESSOAL VIEW -->
     <div id="view-personal" class="personal-wrap hidden">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+      <!-- Header -->
+      <div class="personal-header">
         <div>
-          <h2 style="font-size:22px;font-weight:800;letter-spacing:-0.5px;font-family:var(--font-display)">Meu Painel
-            <span style="font-size:12px;font-weight:500;color:var(--label3);margin-left:8px;letter-spacing:0">🔒 Privado — visível apenas para você</span>
-          </h2>
+          <h2 class="personal-title">Meu Painel <span class="personal-title-badge">🔒 Privado</span></h2>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="openPersonalTaskModal(null)">
-          <svg width="13" height="13" style="margin-right:5px"><use href="#ic-plus"/></svg>Nova tarefa
+        <button class="btn btn-primary pt-btn-add" onclick="openPersonalTaskModal(null)">
+          <svg width="14" height="14" style="flex-shrink:0"><use href="#ic-plus"/></svg>Nova tarefa
         </button>
       </div>
+      <!-- Reminder banner (rendered by JS) -->
+      <div id="pt-reminder-banner"></div>
+      <!-- Analytics -->
       <div id="personal-analytics-section"></div>
+      <!-- Filter bar -->
+      <div class="pt-filter-bar" id="pt-filter-bar">
+        <div class="pt-status-tabs">
+          <button class="pt-tab active" id="ptf-all"     onclick="setPtFilter('status','all')">Todas</button>
+          <button class="pt-tab"        id="ptf-pending" onclick="setPtFilter('status','pending')">Pendentes</button>
+          <button class="pt-tab"        id="ptf-done"    onclick="setPtFilter('status','done')">Concluídas</button>
+        </div>
+        <div class="pt-filter-extras" id="pt-filter-extras">
+          <select class="pt-filter-select" id="ptf-priority" onchange="setPtFilter('priority',this.value)">
+            <option value="">Prioridade</option>
+            <option value="critica">🔴 Crítica</option>
+            <option value="alta">🟠 Alta</option>
+            <option value="media">🟡 Média</option>
+            <option value="baixa">🟢 Baixa</option>
+          </select>
+          <button class="pt-filter-date-toggle" id="ptf-date-btn" onclick="togglePtDateFilter()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Período
+          </button>
+        </div>
+        <div class="pt-date-range hidden" id="pt-date-range">
+          <input type="date" class="pt-date-input" id="ptf-from" onchange="setPtFilter('dateFrom',this.value)" placeholder="De">
+          <span class="pt-date-sep">→</span>
+          <input type="date" class="pt-date-input" id="ptf-to" onchange="setPtFilter('dateTo',this.value)" placeholder="Até">
+          <button class="pt-date-clear" onclick="clearPtDateFilter()" title="Limpar datas">✕</button>
+        </div>
+      </div>
+      <!-- Tasks list -->
       <div id="personal-tasks-content"></div>
     </div><!-- end view-personal -->
 
@@ -754,28 +784,34 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
 
 <!-- ═══════════════════ PERSONAL TASK MODAL ═══════════════════ -->
 <div class="modal-overlay" id="personal-task-overlay" onclick="onOverlayClick(event,'personal-task-overlay')">
-  <div class="modal-box">
+  <div class="modal-box pt-modal-box">
     <div class="modal-title" id="pt-modal-title">Nova Tarefa Pessoal</div>
     <div class="field">
       <label>Título *</label>
-      <input type="text" id="pt-title" placeholder="Descreva sua tarefa…" onkeydown="if(event.key==='Enter')savePersonalTask()">
+      <input type="text" id="pt-title" placeholder="Descreva sua tarefa…" class="pt-input" onkeydown="if(event.key==='Enter')savePersonalTask()">
     </div>
     <div class="field">
       <label>Descrição</label>
-      <textarea id="pt-desc" placeholder="Detalhes, anotações…" rows="3" style="resize:vertical;min-height:72px;padding:8px 11px;font-size:13px;border-radius:var(--radius-sm);border:1px solid var(--separator);background:var(--input-bg);color:var(--label);font-family:var(--font);outline:none;width:100%"></textarea>
+      <textarea id="pt-desc" placeholder="Detalhes, anotações…" rows="2" class="pt-textarea"></textarea>
     </div>
-    <div class="field">
-      <label>Prioridade</label>
-      <select id="pt-priority">
-        <option value="baixa">🟢 Baixa</option>
-        <option value="media" selected>🟡 Média</option>
-        <option value="alta">🟠 Alta</option>
-        <option value="critica">🔴 Crítica</option>
-      </select>
+    <div class="pt-form-row">
+      <div class="field" style="flex:1">
+        <label>Prioridade</label>
+        <select id="pt-priority" class="pt-select">
+          <option value="baixa">🟢 Baixa</option>
+          <option value="media" selected>🟡 Média</option>
+          <option value="alta">🟠 Alta</option>
+          <option value="critica">🔴 Crítica</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1">
+        <label>Prazo</label>
+        <input type="date" id="pt-deadline" class="pt-select">
+      </div>
     </div>
-    <div style="display:flex;gap:10px;margin-top:4px">
-      <button class="btn btn-secondary flex-1" onclick="closeModal('personal-task-overlay')">Cancelar</button>
-      <button class="btn btn-primary flex-1" id="save-pt-btn" onclick="savePersonalTask()">Salvar tarefa</button>
+    <div class="pt-modal-actions">
+      <button class="btn btn-secondary pt-btn-lg" onclick="closeModal('personal-task-overlay')">Cancelar</button>
+      <button class="btn btn-primary pt-btn-lg flex-1" id="save-pt-btn" onclick="savePersonalTask()">Salvar tarefa</button>
     </div>
   </div>
 </div>
@@ -2505,26 +2541,70 @@ function updatePersonalNavCount() {
 }
 
 let _editingPersonalTaskId = null;
+let _ptFilter = { status: 'all', priority: '', dateFrom: '', dateTo: '' };
 
 function openPersonalTaskModal(taskId) {
   _editingPersonalTaskId = taskId;
   const task = taskId ? S.personalTasks.find(t => t.id === taskId) : null;
   const title = document.getElementById('pt-modal-title');
   if (title) title.textContent = task ? 'Editar Tarefa' : 'Nova Tarefa Pessoal';
-  const ptTitle = document.getElementById('pt-title');
-  const ptDesc  = document.getElementById('pt-desc');
-  const ptPri   = document.getElementById('pt-priority');
-  if (ptTitle) ptTitle.value = task?.title || '';
-  if (ptDesc)  ptDesc.value  = task?.description || '';
-  if (ptPri)   ptPri.value   = task?.priority || 'media';
+  const ptTitle    = document.getElementById('pt-title');
+  const ptDesc     = document.getElementById('pt-desc');
+  const ptPri      = document.getElementById('pt-priority');
+  const ptDeadline = document.getElementById('pt-deadline');
+  if (ptTitle)    ptTitle.value    = task?.title       || '';
+  if (ptDesc)     ptDesc.value     = task?.description || '';
+  if (ptPri)      ptPri.value      = task?.priority    || 'media';
+  if (ptDeadline) ptDeadline.value = task?.deadline    || '';
   document.getElementById('personal-task-overlay')?.classList.add('open');
   setTimeout(() => ptTitle?.focus(), 120);
+}
+
+function setPtFilter(key, val) {
+  _ptFilter[key] = val;
+  if (key === 'status') {
+    ['all','pending','done'].forEach(id => {
+      document.getElementById('ptf-' + id)?.classList.toggle('active', id === val);
+    });
+  }
+  renderPersonal();
+}
+
+function togglePtDateFilter() {
+  const wrap = document.getElementById('pt-date-range');
+  const btn  = document.getElementById('ptf-date-btn');
+  if (!wrap) return;
+  const open = !wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden', open);
+  if (btn) btn.classList.toggle('active', !open);
+  if (open) { clearPtDateFilter(); }
+}
+
+function clearPtDateFilter() {
+  _ptFilter.dateFrom = '';
+  _ptFilter.dateTo   = '';
+  const f = document.getElementById('ptf-from');
+  const t = document.getElementById('ptf-to');
+  if (f) f.value = '';
+  if (t) t.value = '';
+  renderPersonal();
+}
+
+function _getFilteredPersonalTasks() {
+  let tasks = S.personalTasks;
+  if (_ptFilter.status === 'pending') tasks = tasks.filter(t => !t.done);
+  if (_ptFilter.status === 'done')    tasks = tasks.filter(t =>  t.done);
+  if (_ptFilter.priority) tasks = tasks.filter(t => t.priority === _ptFilter.priority);
+  if (_ptFilter.dateFrom) tasks = tasks.filter(t => t.deadline && t.deadline >= _ptFilter.dateFrom);
+  if (_ptFilter.dateTo)   tasks = tasks.filter(t => t.deadline && t.deadline <= _ptFilter.dateTo);
+  return tasks;
 }
 
 async function savePersonalTask() {
   const title       = document.getElementById('pt-title')?.value?.trim();
   const description = document.getElementById('pt-desc')?.value?.trim() || '';
   const priority    = document.getElementById('pt-priority')?.value || 'media';
+  const deadline    = document.getElementById('pt-deadline')?.value || null;
   if (!title) { showNotif('⚠️ Informe o título da tarefa.'); return; }
   if (!S.personalTableReady) {
     showNotif('⚠️ Execute o SQL de migração no Supabase primeiro (veja o painel pessoal).');
@@ -2537,12 +2617,12 @@ async function savePersonalTask() {
   let error;
   if (_editingPersonalTaskId) {
     ({ error } = await db.from('personal_tasks')
-      .update({ title, description, priority, updated_at: new Date().toISOString() })
+      .update({ title, description, priority, deadline, updated_at: new Date().toISOString() })
       .eq('id', _editingPersonalTaskId)
       .eq('user_id', S.me.id));
   } else {
     ({ error } = await db.from('personal_tasks')
-      .insert({ title, description, priority, done: false, user_id: S.me.id }));
+      .insert({ title, description, priority, deadline, done: false, user_id: S.me.id }));
   }
   setBtnLoading('save-pt-btn', false);
   if (error) {
@@ -2604,10 +2684,26 @@ const PT_PRIORITIES = [
 ];
 
 function renderPersonalTaskHtml(t) {
-  const editIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
-  const trashIcon = `<svg width="13" height="13"><use href="#ic-trash"/></svg>`;
+  const today   = todayStr();
+  const soon3   = new Date(); soon3.setDate(soon3.getDate() + 3);
+  const soonStr = soon3.toISOString().slice(0, 10);
+  const overdue = !t.done && t.deadline && t.deadline < today;
+  const soon    = !t.done && t.deadline && t.deadline >= today && t.deadline <= soonStr;
+  const calIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+  const editIcon  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+  const trashIcon = `<svg width="15" height="15"><use href="#ic-trash"/></svg>`;
+
+  let deadlineBadge = '';
+  if (t.deadline && !t.done) {
+    const cls  = overdue ? 'pt-deadline overdue' : soon ? 'pt-deadline soon' : 'pt-deadline';
+    const label = overdue ? '! Atrasado' : fmtDate(t.deadline);
+    deadlineBadge = `<div class="${cls}">${calIcon} ${label}</div>`;
+  } else if (t.deadline && t.done) {
+    deadlineBadge = `<div class="pt-deadline done">${calIcon} ${fmtDate(t.deadline)}</div>`;
+  }
+
   return `
-  <div class="personal-task-item${t.done ? ' pt-done' : ''}" data-pt-id="${esc(t.id)}">
+  <div class="personal-task-item${t.done ? ' pt-done' : ''}${overdue ? ' pt-overdue' : ''}" data-pt-id="${esc(t.id)}">
     <label class="pt-check-label" title="${t.done ? 'Marcar como pendente' : 'Marcar como concluída'}">
       <input type="checkbox" ${t.done ? 'checked' : ''} onchange="togglePersonalTask('${esc(t.id)}')">
       <span class="pt-check-box"></span>
@@ -2615,10 +2711,11 @@ function renderPersonalTaskHtml(t) {
     <div class="pt-content">
       <div class="pt-title">${esc(t.title)}</div>
       ${t.description ? `<div class="pt-desc">${esc(t.description)}</div>` : ''}
+      ${deadlineBadge}
     </div>
     <div class="pt-actions">
-      <button class="btn btn-icon" onclick="openPersonalTaskModal('${esc(t.id)}')" title="Editar">${editIcon}</button>
-      <button class="btn btn-icon" onclick="deletePersonalTask('${esc(t.id)}')" title="Remover" style="color:var(--danger)">${trashIcon}</button>
+      <button class="btn btn-icon pt-action-btn" onclick="openPersonalTaskModal('${esc(t.id)}')" title="Editar">${editIcon}</button>
+      <button class="btn btn-icon pt-action-btn" onclick="deletePersonalTask('${esc(t.id)}')" title="Remover" style="color:var(--danger)">${trashIcon}</button>
     </div>
   </div>`;
 }
@@ -2629,10 +2726,12 @@ const _PERSONAL_MIGRATION_SQL = `create table if not exists public.personal_task
   title text not null,
   description text default '',
   priority text not null default 'media' check (priority in ('baixa','media','alta','critica')),
+  deadline date,
   done boolean not null default false,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+alter table public.personal_tasks add column if not exists deadline date;
 alter table public.personal_tasks enable row level security;
 drop policy if exists "personal_tasks_select" on public.personal_tasks;
 drop policy if exists "personal_tasks_insert" on public.personal_tasks;
@@ -2657,11 +2756,30 @@ async function retryPersonalSetup() {
 }
 
 function renderPersonal() {
-  const tasks   = S.personalTasks;
-  const total   = tasks.length;
-  const done    = tasks.filter(t => t.done).length;
-  const pending = total - done;
-  const pct     = total ? Math.round(done / total * 100) : 0;
+  const allTasks  = S.personalTasks;
+  const tasks     = _getFilteredPersonalTasks();
+  const total     = allTasks.length;
+  const done      = allTasks.filter(t => t.done).length;
+  const pending   = total - done;
+  const pct       = total ? Math.round(done / total * 100) : 0;
+
+  /* ── Reminder banner ── */
+  const bannerEl = document.getElementById('pt-reminder-banner');
+  if (bannerEl) {
+    const today   = todayStr();
+    const soon3   = new Date(); soon3.setDate(soon3.getDate() + 3);
+    const soonStr = soon3.toISOString().slice(0, 10);
+    const overdueList = allTasks.filter(t => !t.done && t.deadline && t.deadline < today);
+    const soonList    = allTasks.filter(t => !t.done && t.deadline && t.deadline >= today && t.deadline <= soonStr);
+    if (overdueList.length > 0 || soonList.length > 0) {
+      let parts = [];
+      if (overdueList.length > 0) parts.push(`⚠️ <strong>${overdueList.length}</strong> tarefa${overdueList.length > 1 ? 's' : ''} em atraso`);
+      if (soonList.length > 0)    parts.push(`⏰ <strong>${soonList.length}</strong> vence${soonList.length > 1 ? 'm' : ''} em até 3 dias`);
+      bannerEl.innerHTML = `<div class="pt-reminder-banner"><div class="pt-reminder-dot"></div><div class="pt-reminder-text">${parts.join(' &nbsp;·&nbsp; ')}</div></div>`;
+    } else {
+      bannerEl.innerHTML = '';
+    }
+  }
 
   /* ── Migration card when table doesn't exist ── */
   const analyticsEl = document.getElementById('personal-analytics-section');
