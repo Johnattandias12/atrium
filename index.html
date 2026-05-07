@@ -916,6 +916,7 @@ let S = {
   cardComments: [], // comments for currently open card
   editingCardId: null,
   personalTasks: [],
+  personalTableReady: true,
   view: 'board',
   search: '',
   filterUser: '',
@@ -1035,7 +1036,7 @@ async function doLogout() {
   clearTimeout(searchTimer);
   teardownRealtime();
   await db.auth.signOut();
-  S = { session:null, me:null, profiles:[], cards:[], cardComments:[], editingCardId:null, personalTasks:[], view:'board', search:'', filterUser:'', filterUrgency:'', filterDateFrom:'', filterDateTo:'' };
+  S = { session:null, me:null, profiles:[], cards:[], cardComments:[], editingCardId:null, personalTasks:[], personalTableReady:true, view:'board', search:'', filterUser:'', filterUrgency:'', filterDateFrom:'', filterDateTo:'' };
   showScreen('auth');
 }
 
@@ -2469,13 +2470,29 @@ async function saveProfileColor(color) {
 /* ═══════════════════════════════════════════════════════
    PAINEL PESSOAL — CRUD & Render
 ═══════════════════════════════════════════════════════ */
+function _isSchemaError(err) {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  const code = err.code || '';
+  return msg.includes('schema cache') || msg.includes('does not exist') ||
+         msg.includes('relation') || code === '42P01' || code === 'PGRST200';
+}
+
 async function loadPersonalTasks() {
   if (!S.me?.id) return;
   const { data, error } = await db.from('personal_tasks')
     .select('*')
     .eq('user_id', S.me.id)
     .order('created_at', { ascending: false });
-  if (error) { console.warn('personal_tasks:', error.message); return; }
+  if (error) {
+    if (_isSchemaError(error)) {
+      S.personalTableReady = false;
+    } else {
+      console.warn('personal_tasks:', error.message);
+    }
+    return;
+  }
+  S.personalTableReady = true;
   S.personalTasks = data || [];
 }
 
@@ -2509,6 +2526,12 @@ async function savePersonalTask() {
   const description = document.getElementById('pt-desc')?.value?.trim() || '';
   const priority    = document.getElementById('pt-priority')?.value || 'media';
   if (!title) { showNotif('⚠️ Informe o título da tarefa.'); return; }
+  if (!S.personalTableReady) {
+    showNotif('⚠️ Execute o SQL de migração no Supabase primeiro (veja o painel pessoal).');
+    closeModal('personal-task-overlay');
+    switchView('personal', document.getElementById('nav-personal'));
+    return;
+  }
 
   setBtnLoading('save-pt-btn', true);
   let error;
@@ -2522,7 +2545,17 @@ async function savePersonalTask() {
       .insert({ title, description, priority, done: false, user_id: S.me.id }));
   }
   setBtnLoading('save-pt-btn', false);
-  if (error) { showNotif('❌ Erro: ' + error.message); return; }
+  if (error) {
+    if (_isSchemaError(error)) {
+      S.personalTableReady = false;
+      closeModal('personal-task-overlay');
+      switchView('personal', document.getElementById('nav-personal'));
+      showNotif('⚠️ Tabela não encontrada. Execute o SQL de migração no Supabase.');
+    } else {
+      showNotif('❌ Erro: ' + error.message);
+    }
+    return;
+  }
 
   closeModal('personal-task-overlay');
   await loadPersonalTasks();
@@ -2590,6 +2623,39 @@ function renderPersonalTaskHtml(t) {
   </div>`;
 }
 
+const _PERSONAL_MIGRATION_SQL = `create table if not exists public.personal_tasks (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  title text not null,
+  description text default '',
+  priority text not null default 'media' check (priority in ('baixa','media','alta','critica')),
+  done boolean not null default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table public.personal_tasks enable row level security;
+drop policy if exists "personal_tasks_select" on public.personal_tasks;
+drop policy if exists "personal_tasks_insert" on public.personal_tasks;
+drop policy if exists "personal_tasks_update" on public.personal_tasks;
+drop policy if exists "personal_tasks_delete" on public.personal_tasks;
+create policy "personal_tasks_select" on public.personal_tasks for select using (auth.uid() = user_id);
+create policy "personal_tasks_insert" on public.personal_tasks for insert with check (auth.uid() = user_id);
+create policy "personal_tasks_update" on public.personal_tasks for update using (auth.uid() = user_id);
+create policy "personal_tasks_delete" on public.personal_tasks for delete using (auth.uid() = user_id);`;
+
+function _copyMigrationSql() {
+  navigator.clipboard.writeText(_PERSONAL_MIGRATION_SQL)
+    .then(() => showNotif('✅ SQL copiado! Cole no SQL Editor do Supabase e clique em Run.'))
+    .catch(() => showNotif('⚠️ Copie o SQL manualmente.'));
+}
+
+async function retryPersonalSetup() {
+  showNotif('⏳ Verificando tabela…');
+  await loadPersonalTasks();
+  updatePersonalNavCount();
+  renderPersonal();
+}
+
 function renderPersonal() {
   const tasks   = S.personalTasks;
   const total   = tasks.length;
@@ -2597,9 +2663,35 @@ function renderPersonal() {
   const pending = total - done;
   const pct     = total ? Math.round(done / total * 100) : 0;
 
-  /* ── Analytics section ── */
+  /* ── Migration card when table doesn't exist ── */
   const analyticsEl = document.getElementById('personal-analytics-section');
-  if (analyticsEl) {
+  if (!S.personalTableReady) {
+    if (analyticsEl) {
+      analyticsEl.innerHTML = `
+        <div class="personal-migration-card">
+          <div class="personal-migration-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Configuração necessária
+          </div>
+          <div class="personal-migration-desc">
+            A tabela <code style="background:var(--fill2);padding:1px 6px;border-radius:4px;font-family:var(--font-mono);font-size:11px">personal_tasks</code> ainda não existe no seu banco Supabase.
+            Copie o SQL abaixo, acesse <strong>Supabase → SQL Editor → New query</strong>, cole e clique em <strong>Run</strong>.
+          </div>
+          <div class="personal-migration-sql" id="migration-sql-block">${_PERSONAL_MIGRATION_SQL}</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="_copyMigrationSql()">📋 Copiar SQL</button>
+            <button class="btn btn-secondary btn-sm" onclick="retryPersonalSetup()">🔄 Já executei — Tentar novamente</button>
+          </div>
+        </div>`;
+    }
+    const tasksEl = document.getElementById('personal-tasks-content');
+    if (tasksEl) tasksEl.innerHTML = '';
+    return;
+  }
+
+  /* ── Analytics section ── */
+  if (!analyticsEl) return;
+  {
     const priBreak = PT_PRIORITIES.map(p => {
       const cnt = tasks.filter(t => t.priority === p.id).length;
       const pctP = total ? Math.round(cnt / total * 100) : 0;
