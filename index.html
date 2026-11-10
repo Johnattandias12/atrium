@@ -81,6 +81,10 @@
   <symbol id="ic-personal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
     <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
   </symbol>
+  <!-- costs / currency -->
+  <symbol id="ic-costs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+  </symbol>
 </svg>
 <style>
 /* ── Inline overrides (main styles in style.css) ── */
@@ -155,14 +159,23 @@
         <button class="copy-btn" onclick="copySql()">Copiar</button>
 create extension if not exists "uuid-ossp";
 
+-- 1. Alterar restrição de cargos na tabela profiles para incluir novos setores
+alter table public.profiles drop constraint if exists profiles_role_check;
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   name text not null default 'Usuário',
-  role text not null default 'corretor' check (role in ('admin','gerente','corretor')),
+  role text not null default 'corretor' check (role in ('admin','gerente','corretor','marketing','comercial','juridico')),
   color text default '#007AFF',
   avatar_url text,
+  allowed_departments text[] default '{comercial}',
   created_at timestamptz default now()
 );
+
+-- Migrações de segurança
+alter table public.profiles add column if not exists allowed_departments text[] default '{comercial}';
+alter table public.profiles drop constraint if exists profiles_role_check;
+alter table public.profiles add constraint profiles_role_check check (role in ('admin','gerente','corretor','marketing','comercial','juridico'));
 
 create table if not exists public.cards (
   id uuid default gen_random_uuid() primary key,
@@ -172,6 +185,7 @@ create table if not exists public.cards (
   urgency text not null default 'media' check (urgency in ('baixa','media','alta','critica')),
   assignee_id uuid references public.profiles(id) on delete set null,
   co_assignee_ids uuid[] default '{}',
+  department text not null default 'gerencia',
   deadline date,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz default now(),
@@ -181,6 +195,7 @@ create table if not exists public.cards (
 -- Migrações para tabelas já existentes (seguras para re-executar)
 alter table public.cards add column if not exists co_assignee_ids uuid[] default '{}';
 alter table public.cards add column if not exists position float default 0;
+alter table public.cards add column if not exists department text not null default 'gerencia';
 
 create table if not exists public.comments (
   id uuid default gen_random_uuid() primary key,
@@ -190,9 +205,19 @@ create table if not exists public.comments (
   created_at timestamptz default now()
 );
 
+-- Tabela de custos operacionais/assinaturas
+create table if not exists public.operational_costs (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  cost numeric(10,2) not null,
+  billing_cycle text not null check (billing_cycle in ('mensal','anual')),
+  created_at timestamptz default now()
+);
+
 alter table public.profiles enable row level security;
 alter table public.cards enable row level security;
 alter table public.comments enable row level security;
+alter table public.operational_costs enable row level security;
 
 drop policy if exists "profiles_read" on public.profiles;
 drop policy if exists "profiles_insert" on public.profiles;
@@ -204,6 +229,10 @@ drop policy if exists "cards_delete" on public.cards;
 drop policy if exists "comments_read" on public.comments;
 drop policy if exists "comments_insert" on public.comments;
 drop policy if exists "comments_delete" on public.comments;
+drop policy if exists "costs_select" on public.operational_costs;
+drop policy if exists "costs_insert" on public.operational_costs;
+drop policy if exists "costs_update" on public.operational_costs;
+drop policy if exists "costs_delete" on public.operational_costs;
 
 -- Políticas RLS seguras: apenas usuários autenticados acessam os dados
 create policy "profiles_read"   on public.profiles for select using (auth.uid() is not null);
@@ -218,6 +247,19 @@ create policy "cards_delete" on public.cards for delete using (auth.uid() is not
 create policy "comments_read"   on public.comments for select using (auth.uid() is not null);
 create policy "comments_insert" on public.comments for insert with check (auth.uid() = user_id);
 create policy "comments_delete" on public.comments for delete using (auth.uid() = user_id or exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'));
+
+create policy "costs_select" on public.operational_costs for select using (
+  exists (select 1 from public.profiles where id = auth.uid() and (role = 'admin' or role = 'gerente'))
+);
+create policy "costs_insert" on public.operational_costs for insert with check (
+  exists (select 1 from public.profiles where id = auth.uid() and (role = 'admin' or role = 'gerente'))
+);
+create policy "costs_update" on public.operational_costs for update using (
+  exists (select 1 from public.profiles where id = auth.uid() and (role = 'admin' or role = 'gerente'))
+);
+create policy "costs_delete" on public.operational_costs for delete using (
+  exists (select 1 from public.profiles where id = auth.uid() and (role = 'admin' or role = 'gerente'))
+);
 
 -- Painel Pessoal: demandas privadas por usuário
 create table if not exists public.personal_tasks (
@@ -245,13 +287,34 @@ create policy "personal_tasks_delete" on public.personal_tasks for delete using 
 
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  default_depts text[];
+  user_role text;
 begin
-  insert into public.profiles (id, name, role)
+  user_role := coalesce(new.raw_user_meta_data->>'role', 'corretor');
+  
+  if user_role = 'admin' or user_role = 'gerente' then
+    default_depts := '{gerencia,juridico,marketing,comercial}';
+  elsif user_role = 'marketing' then
+    default_depts := '{marketing}';
+  elsif user_role = 'comercial' then
+    default_depts := '{comercial}';
+  elsif user_role = 'juridico' then
+    default_depts := '{juridico}';
+  else
+    default_depts := '{comercial}';
+  end if;
+
+  insert into public.profiles (id, name, role, allowed_departments)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'name', split_part(new.email,'@',1)),
-    coalesce(new.raw_user_meta_data->>'role', 'corretor')
-  );
+    user_role,
+    default_depts
+  )
+  on conflict (id) do update set
+    role = excluded.role,
+    allowed_departments = excluded.allowed_departments;
   return new;
 end;
 $$;
@@ -394,6 +457,10 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
         <span class="nav-icon-wrap"><svg><use href="#ic-settings"/></svg></span>
         <span class="nav-label">Config</span>
       </div>
+      <div class="nav-item" id="nav-costs" onclick="switchView('costs', this)" style="display:none">
+        <span class="nav-icon-wrap"><svg><use href="#ic-costs"/></svg></span>
+        <span class="nav-label">Assinaturas</span>
+      </div>
     </div>
     <div class="sidebar-section" style="margin-top:4px">
       <div class="sidebar-section-label">Pessoal</div>
@@ -427,6 +494,12 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
       <!-- TOPBAR -->
     <div class="topbar">
       <div class="topbar-title" id="topbar-title">Quadro</div>
+      <!-- Seletor de Setor/Painel -->
+      <div class="dept-tabs-container" id="dept-tabs-container" style="display:none;margin-left:20px;">
+        <div class="dept-tabs" id="dept-tabs">
+          <!-- Renderizado dinamicamente por JS -->
+        </div>
+      </div>
       <div class="topbar-spacer"></div>
       <!-- Board filters (shown only on board view) -->
       <div id="board-filters" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -486,6 +559,15 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
 
     <!-- VIEWS -->
     <div id="view-board" class="board-container">
+      <!-- Tela de Bloqueio (Locked View) -->
+      <div id="view-locked" class="locked-container hidden">
+        <div class="locked-card">
+          <div class="locked-icon">🔒</div>
+          <h2 class="locked-title">Painel Bloqueado</h2>
+          <p class="locked-desc">Você não tem autorização para visualizar o painel do setor <strong id="locked-dept-name"></strong>.</p>
+          <p class="locked-action">Solicite acesso a Johnattan ou Daniel Filgueira para poder visualizar as demandas deste setor.</p>
+        </div>
+      </div>
       <div class="board" id="board"></div>
     </div>
 
@@ -501,6 +583,45 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
         <button class="btn btn-primary btn-sm" onclick="openAddMemberModal()" id="add-member-btn">+ Convidar</button>
       </div>
       <div id="team-list"></div>
+    </div>
+
+    <!-- VIEW ASSINATURAS (COSTS) -->
+    <div id="view-costs" class="hidden" style="flex:1;overflow-y:auto;padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.5px;">Custos de Assinaturas</h2>
+        <button class="btn btn-primary btn-sm" onclick="openCostModal(null)">
+          <svg width="14" height="14" style="flex-shrink:0"><use href="#ic-plus"/></svg>&nbsp;Nova Assinatura
+        </button>
+      </div>
+
+      <!-- Sum totals card -->
+      <div class="costs-summary-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;">
+        <div class="costs-summary-card" style="background:var(--surface);border:1px solid var(--separator);border-radius:var(--radius);padding:20px;text-align:center;">
+          <div style="font-size:11px;color:var(--label3);text-transform:uppercase;font-weight:700;letter-spacing:0.5px;">Custo Mensal Total</div>
+          <div style="font-size:28px;font-weight:800;color:var(--accent);margin-top:8px;" id="total-monthly-cost">R$ 0,00</div>
+        </div>
+        <div class="costs-summary-card" style="background:var(--surface);border:1px solid var(--separator);border-radius:var(--radius);padding:20px;text-align:center;">
+          <div style="font-size:11px;color:var(--label3);text-transform:uppercase;font-weight:700;letter-spacing:0.5px;">Projeção Anual Total</div>
+          <div style="font-size:28px;font-weight:800;color:var(--success);margin-top:8px;" id="total-yearly-cost">R$ 0,00</div>
+        </div>
+      </div>
+
+      <!-- Costs Table -->
+      <div style="background:var(--surface);border:1px solid var(--separator);border-radius:var(--radius);overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;" class="costs-table">
+          <thead>
+            <tr style="background:var(--fill);border-bottom:1px solid var(--separator);text-align:left;">
+              <th style="padding:14px 16px;font-size:12px;font-weight:700;color:var(--label2);text-transform:uppercase;">Nome / Serviço</th>
+              <th style="padding:14px 16px;font-size:12px;font-weight:700;color:var(--label2);text-transform:uppercase;">Valor</th>
+              <th style="padding:14px 16px;font-size:12px;font-weight:700;color:var(--label2);text-transform:uppercase;">Ciclo</th>
+              <th style="padding:14px 16px;font-size:12px;font-weight:700;color:var(--label2);text-transform:uppercase;text-align:right;">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="costs-list-body">
+            <!-- Renderizado dinamicamente -->
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div id="view-settings" class="settings-wrap hidden">
@@ -632,6 +753,15 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
         <button class="btn btn-primary pt-btn-add" onclick="openPersonalTaskModal(null)">
           <svg width="14" height="14" style="flex-shrink:0"><use href="#ic-plus"/></svg>Nova tarefa
         </button>
+      </div>
+
+      <!-- Áreas da vida + alternância quadro/lista -->
+      <div class="pt-areabar">
+        <div class="pt-area-tabs" id="pt-area-tabs"></div>
+        <div class="pt-view-toggle">
+          <button class="pt-tab" id="ptv-kanban" onclick="setPtView('kanban')">Quadro</button>
+          <button class="pt-tab" id="ptv-list"   onclick="setPtView('list')">Lista</button>
+        </div>
       </div>
 
       <!-- Alert carousel (renderizado por JS) -->
@@ -839,9 +969,136 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
         <input type="date" id="pt-deadline" class="pt-select">
       </div>
     </div>
+    <div class="pt-form-row" style="margin-top:12px">
+      <div class="field" style="flex:1">
+        <label>Área</label>
+        <select id="pt-area" class="pt-select">
+          <option value="ufrn">UFRN</option>
+          <option value="trabalho">Trabalho</option>
+          <option value="pessoal" selected>Pessoal</option>
+          <option value="saude">Saúde e Treino</option>
+          <option value="compras">Compras</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1">
+        <label>Valor (R$)</label>
+        <input type="number" id="pt-amount" class="pt-select" min="0" step="0.01" inputmode="decimal" placeholder="0,00">
+      </div>
+    </div>
     <div class="pt-modal-actions">
       <button class="btn btn-secondary pt-btn-lg" onclick="closeModal('personal-task-overlay')">Cancelar</button>
       <button class="btn btn-primary pt-btn-lg flex-1" id="save-pt-btn" onclick="savePersonalTask()">Salvar tarefa</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ TUTORIAL OVERLAY ═══════════════════ -->
+<div class="modal-overlay" id="tutorial-overlay" style="display:none;z-index:99999">
+  <div class="modal-box tutorial-box" style="max-width:500px;text-align:center;padding:32px;">
+    <div class="tutorial-logo" style="margin-bottom:20px;display:flex;justify-content:center">
+      <div class="brand-icon" style="width:56px;height:56px;border-radius:16px;font-size:28px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900">A</div>
+    </div>
+    <h2 class="modal-title" style="font-size:22px;margin-bottom:12px;font-family:var(--font-display)">Bem-vindo ao ATRIUM!</h2>
+    <div class="tutorial-slides" id="tutorial-slides">
+      <!-- Slide 1 -->
+      <div class="tutorial-slide" data-slide="1">
+        <p style="color:var(--label2);margin-bottom:20px;font-size:14px;line-height:1.5">
+          O ATRIUM agora está organizado em painéis por setores da empresa:<br>
+          <strong>Gerência, Jurídico, Marketing e Comercial</strong>.
+        </p>
+        <p style="color:var(--label3);font-size:13px;line-height:1.4">
+          Você visualizará o painel do seu setor por padrão. Utilize as abas no topo do menu para alternar entre os painéis autorizados.
+        </p>
+      </div>
+      <!-- Slide 2 -->
+      <div class="tutorial-slide hidden" data-slide="2">
+        <p style="color:var(--label2);margin-bottom:20px;font-size:14px;line-height:1.5">
+          <strong>Gestão de Demandas Visual:</strong><br>
+          Arraste e solte os cards entre as colunas para atualizar o status em tempo real.
+        </p>
+        <p style="color:var(--label3);font-size:13px;line-height:1.4">
+          Clique em qualquer card para ver detalhes, data limite, co-responsáveis e interagir na aba de comentários.
+        </p>
+      </div>
+      <!-- Slide 3 -->
+      <div class="tutorial-slide hidden" data-slide="3">
+        <p style="color:var(--label2);margin-bottom:20px;font-size:14px;line-height:1.5">
+          <strong>Segurança &amp; Colaboração:</strong><br>
+          Os administradores controlam quem tem acesso a cada setor através do painel "Equipe".
+        </p>
+        <p style="color:var(--label3);font-size:13px;line-height:1.4">
+          Use o <strong>Painel Pessoal</strong> no menu lateral para listar suas tarefas privadas.
+        </p>
+      </div>
+    </div>
+    <div class="tutorial-indicators" style="display:flex;justify-content:center;gap:6px;margin:24px 0 16px;">
+      <span class="t-dot active" data-slide="1" onclick="showTutorialSlide(1)"></span>
+      <span class="t-dot" data-slide="2" onclick="showTutorialSlide(2)"></span>
+      <span class="t-dot" data-slide="3" onclick="showTutorialSlide(3)"></span>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-secondary flex-1" id="tutorial-prev-btn" onclick="prevTutorialSlide()" style="visibility:hidden">Voltar</button>
+      <button class="btn btn-primary flex-1" id="tutorial-next-btn" onclick="nextTutorialSlide()">Próximo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ EDIT MEMBER MODAL ═══════════════════ -->
+<div class="modal-overlay" id="edit-member-overlay" onclick="onOverlayClick(event, 'edit-member-overlay')">
+  <div class="modal-box">
+    <div class="modal-title">Editar Membro</div>
+    <div class="field"><label>Nome</label><input type="text" id="em-name" readonly style="opacity:0.6;background:var(--fill)"></div>
+    <div class="field">
+      <label>Cargo / Perfil</label>
+      <select id="em-role">
+        <option value="corretor">Corretor(a)</option>
+        <option value="gerente">Gerente</option>
+        <option value="admin">Administrador</option>
+        <option value="marketing">Marketing</option>
+        <option value="comercial">Comercial</option>
+        <option value="juridico">Jurídico</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Painéis Autorizados</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 0;" id="em-depts-container">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="em-dept-gerencia" value="gerencia"> Gerência
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="em-dept-juridico" value="juridico"> Jurídico
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="em-dept-marketing" value="marketing"> Marketing
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="em-dept-comercial" value="comercial"> Comercial
+        </label>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:12px;">
+      <button class="btn btn-secondary flex-1" onclick="closeModal('edit-member-overlay')">Cancelar</button>
+      <button class="btn btn-primary flex-1" id="save-edit-member-btn" onclick="saveEditedMember()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ COST MODAL ═══════════════════ -->
+<div class="modal-overlay" id="cost-overlay" onclick="onOverlayClick(event, 'cost-overlay')">
+  <div class="modal-box">
+    <div class="modal-title" id="cost-modal-title">Nova Assinatura</div>
+    <div class="field"><label>Nome do Serviço *</label><input type="text" id="c-name" placeholder="ChatGPT Plus, Vercel Pro, etc."></div>
+    <div class="field"><label>Valor (R$) *</label><input type="number" step="0.01" id="c-cost" placeholder="0.00"></div>
+    <div class="field">
+      <label>Ciclo de Cobrança</label>
+      <select id="c-cycle">
+        <option value="mensal">Mensal</option>
+        <option value="anual">Anual</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:12px;">
+      <button class="btn btn-secondary flex-1" onclick="closeModal('cost-overlay')">Cancelar</button>
+      <button class="btn btn-primary flex-1" id="save-cost-btn" onclick="saveCost()">Salvar</button>
     </div>
   </div>
 </div>
@@ -989,6 +1246,7 @@ let S = {
   filterUrgency: '',
   filterDateFrom: '',
   filterDateTo: '',
+  currentDepartment: 'gerencia',
 };
 
 const COLS = [
@@ -998,7 +1256,7 @@ const COLS = [
   { id: 'done',   label: 'Concluído',    color: '#34C759' },
 ];
 
-const ROLE_LABELS = { admin: 'Administrador', gerente: 'Gerente', corretor: 'Corretor(a)' };
+const ROLE_LABELS = { admin: 'Administrador', gerente: 'Gerente', corretor: 'Corretor(a)', marketing: 'Marketing', comercial: 'Comercial', juridico: 'Jurídico' };
 const URGENCY_LABELS = { baixa: 'Baixa', media: 'Média', alta: 'Alta', critica: 'Crítica' };
 
 /* ═══════════════════════════════════════════════════════
@@ -1173,9 +1431,33 @@ async function bootApp() {
     await loadCards();
     await loadCurrentUser();
     await loadPersonalTasks();
+
+    // Inicializa o setor padrão com base no perfil e permissões
+    if (S.me) {
+      const allowed = S.me.allowed_departments;
+      if (S.me.role === 'admin' || S.me.role === 'gerente') {
+        S.currentDepartment = 'gerencia';
+      } else if (Array.isArray(allowed) && allowed.length > 0) {
+        S.currentDepartment = allowed[0];
+      } else if (typeof allowed === 'string') {
+        const parsed = allowed.replace(/{|}/g, '').split(',').filter(Boolean);
+        S.currentDepartment = parsed[0] || 'comercial';
+      } else {
+        if (['marketing', 'comercial', 'juridico', 'gerencia'].includes(S.me.role)) {
+          S.currentDepartment = S.me.role;
+        } else {
+          S.currentDepartment = 'comercial';
+        }
+      }
+    }
+
     populateFilters();
     renderSidebar();
-    renderBoard();
+    
+    // Renderiza e inicializa as abas de setores no menu superior
+    renderDepartmentTabs();
+    switchDepartment(S.currentDepartment);
+
     renderStats();
     renderSettingsProfile();
     updatePersonalNavCount();
@@ -1185,6 +1467,13 @@ async function bootApp() {
     setTimeout(initParticles, 100);
     showWelcome();
     setupRealtime();
+
+    // Exibe o tutorial de primeiro acesso se necessário
+    if (!localStorage.getItem('atrium_tutorial_seen')) {
+      document.getElementById('tutorial-overlay').style.display = 'flex';
+      showTutorialSlide(1);
+    }
+
   } catch(e) {
     if (e.message && e.message.includes('public.profiles')) {
       showNotif('⚠️ Tabelas do banco não encontradas! Siga o passo a passo.');
@@ -1384,6 +1673,14 @@ function switchView(view, navEl) {
   document.getElementById('view-team').classList.toggle('hidden', view !== 'team');
   document.getElementById('view-settings').classList.toggle('hidden', view !== 'settings');
   document.getElementById('view-personal').classList.toggle('hidden', view !== 'personal');
+  document.getElementById('view-costs').classList.toggle('hidden', view !== 'costs');
+
+  // Controla o seletor de setor no menu superior
+  const deptContainer = document.getElementById('dept-tabs-container');
+  if (deptContainer) {
+    deptContainer.style.display = view === 'board' ? 'flex' : 'none';
+  }
+
   document.getElementById('board-filters').style.display = view === 'board' ? 'flex' : 'none';
   document.getElementById('stats-row').style.display = view === 'board' ? 'flex' : 'none';
   if (view !== 'board') {
@@ -1392,14 +1689,30 @@ function switchView(view, navEl) {
   } else {
     renderOverdueBanner();
     renderBoardProgress();
+    // Reavalia permissões de setor
+    switchDepartment(S.currentDepartment);
   }
 
-  const titles = { board: 'Quadro de Demandas', analytics: 'Analytics', team: 'Equipe', settings: 'Configurações', personal: 'Meu Painel Pessoal' };
+  const titles = { 
+    board: 'Quadro de Demandas', 
+    analytics: 'Analytics', 
+    team: 'Equipe', 
+    settings: 'Configurações', 
+    personal: 'Meu Painel Pessoal',
+    costs: 'Custos de Assinaturas'
+  };
   document.getElementById('topbar-title').textContent = titles[view] || view;
 
   if (view === 'team') renderTeam();
-  if (view === 'analytics') renderAnalytics();
+  if (view === 'analytics') {
+    if (S.me?.role === 'admin' || S.me?.role === 'gerente') {
+      loadCosts().then(renderAnalytics);
+    } else {
+      renderAnalytics();
+    }
+  }
   if (view === 'personal') renderPersonal();
+  if (view === 'costs') loadCosts();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1534,6 +1847,7 @@ function filteredCards(colId) {
   // Sort cards by their position (if available) or fallback to created_at
   let list = S.cards.filter(c => {
     if (c.status !== colId) return false;
+    if ((c.department || 'gerencia') !== (S.currentDepartment || 'gerencia')) return false;
     if (fu && c.assignee_id !== fu) return false;
     if (fg && c.urgency !== fg) return false;
     if (S.search && !c.title.toLowerCase().includes(S.search) && !(c.description||'').toLowerCase().includes(S.search)) return false;
@@ -1819,6 +2133,7 @@ async function saveCard() {
     assignee_id: document.getElementById('f-assignee').value || null,
     deadline: document.getElementById('f-deadline').value || null,
     co_assignee_ids: getSelectedCoAssignees(),
+    department: S.currentDepartment || 'gerencia',
     updated_at: new Date().toISOString(),
   };
 
@@ -1969,6 +2284,13 @@ function renderTeam() {
     const teamAv = p.avatar_url
       ? `<div class="avatar av-lg" style="background-image:url('${p.avatar_url}');background-size:cover;background-position:center;background-color:transparent;box-shadow:0 6px 18px rgba(0,0,0,0.4);flex-shrink:0"></div>`
       : `<div class="avatar av-lg" style="background:${safeColor(p.color)};box-shadow:0 6px 18px rgba(0,0,0,0.4);flex-shrink:0">${esc(initials(p.name))}</div>`;
+    const editBtn = isAdmin ? `<button class="btn btn-secondary btn-xs" style="margin-top:6px;" onclick="openEditMemberModal('${p.id}')">Editar</button>` : '';
+    const deptList = Array.isArray(p.allowed_departments) ? p.allowed_departments : (typeof p.allowed_departments === 'string' ? p.allowed_departments.replace(/{|}/g, '').split(',').filter(Boolean) : []);
+    const deptListStr = deptList.map(d => {
+      const labels = { gerencia: 'Gerência', juridico: 'Jurídico', marketing: 'Marketing', comercial: 'Comercial' };
+      return labels[d] || d;
+    }).join(', ') || 'Nenhum';
+
     return `<div class="team-card" style="${isMe?'border-color:var(--accent);background:rgba(10,132,255,0.06)':''}">
       ${teamAv}
       <div class="team-info" style="flex:1;min-width:0">
@@ -1977,8 +2299,12 @@ function renderTeam() {
           ${isMe?'<span style="font-size:10px;background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:99px;font-weight:700">Você</span>':''}
         </div>
         <div class="team-sub" style="margin-top:3px">${active} ativa${active!==1?'s':''} &bull; ${done} concluída${done!==1?'s':''}</div>
+        <div class="team-sub" style="margin-top:2px;font-size:11px;color:var(--label3)">Setores: ${esc(deptListStr)}</div>
       </div>
-      <div class="role-chip r-${p.role}">${ROLE_LABELS[p.role]||p.role}</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;justify-content:center;">
+        <div class="role-chip r-${p.role}">${ROLE_LABELS[p.role]||p.role}</div>
+        ${editBtn}
+      </div>
     </div>`;
   }).join('') || '<div style="color:var(--label3);text-align:center;padding:60px;font-size:14px;">Nenhum membro.<br><small style="opacity:0.5">Verifique o banco de dados.</small></div>';
 }
@@ -2030,6 +2356,12 @@ function renderSidebar() {
   const roleEl = document.getElementById('sb-role');
   if (nameEl) nameEl.textContent = S.me.name?.split(' ').slice(0,2).join(' ') || 'Usuário';
   if (roleEl) roleEl.textContent = ROLE_LABELS[S.me.role] || S.me.role || 'Membro';
+
+  // Exibe ou oculta o item de menu "Assinaturas" com base no cargo
+  const costsNav = document.getElementById('nav-costs');
+  if (costsNav) {
+    costsNav.style.display = (S.me.role === 'admin' || S.me.role === 'gerente') ? 'flex' : 'none';
+  }
 }
 
 /* ─── Date filter helpers ─── */
@@ -2574,6 +2906,120 @@ let _editingPersonalTaskId = null;
 let _ptFilter = { status: 'all', priority: '', dateFrom: '', dateTo: '' };
 let _ptFilterPanelOpen = false;
 
+/* ── Áreas da vida, quadro kanban e Google Agenda ── */
+const PT_AREAS = [
+  { id: 'ufrn',     label: 'UFRN' },
+  { id: 'trabalho', label: 'Trabalho' },
+  { id: 'pessoal',  label: 'Pessoal' },
+  { id: 'saude',    label: 'Saúde e Treino' },
+  { id: 'compras',  label: 'Compras' },
+];
+const PT_STATUSES = [
+  { id: 'todo',  label: 'A fazer', color: '#636366' },
+  { id: 'doing', label: 'Fazendo', color: '#0A84FF' },
+  { id: 'done',  label: 'Feito',   color: '#30D158' },
+];
+function _ptLsGet(k, def) { try { return localStorage.getItem(k) || def; } catch (e) { return def; } }
+function _ptLsSet(k, v)   { try { localStorage.setItem(k, v); } catch (e) {} }
+let _ptArea = _ptLsGet('atrium_pt_area', 'todas');
+let _ptView = _ptLsGet('atrium_pt_view', 'kanban');
+if (_ptArea !== 'todas' && !PT_AREAS.some(a => a.id === _ptArea)) _ptArea = 'todas';
+if (!['kanban', 'list'].includes(_ptView)) _ptView = 'kanban';
+
+// done é a fonte da verdade de "concluída"; status só distingue A fazer de Fazendo.
+function _ptStatus(t) { return t.done ? 'done' : (t.status === 'doing' ? 'doing' : 'todo'); }
+function _ptAreaTasks() { return _ptArea === 'todas' ? S.personalTasks : S.personalTasks.filter(t => (t.area || 'pessoal') === _ptArea); }
+
+function setPtArea(area) {
+  _ptArea = area;
+  _ptLsSet('atrium_pt_area', area);
+  renderPersonal();
+}
+function setPtView(view) {
+  _ptView = view;
+  _ptLsSet('atrium_pt_view', view);
+  renderPersonal();
+}
+
+function _renderPtAreaTabs() {
+  const el = document.getElementById('pt-area-tabs');
+  if (el) {
+    const pend = a => S.personalTasks.filter(t => !t.done && (a === 'todas' || (t.area || 'pessoal') === a)).length;
+    el.innerHTML = [{ id: 'todas', label: 'Todas' }, ...PT_AREAS].map(a => {
+      const n = pend(a.id);
+      return `<button class="pt-chip${_ptArea === a.id ? ' active' : ''}" data-area="${a.id}" onclick="setPtArea('${a.id}')">${a.label}${n ? `<span class="pt-area-count">${n}</span>` : ''}</button>`;
+    }).join('');
+  }
+  document.getElementById('ptv-kanban')?.classList.toggle('active', _ptView === 'kanban');
+  document.getElementById('ptv-list')?.classList.toggle('active', _ptView === 'list');
+}
+
+function _ptGcalUrl(t) {
+  const start = t.deadline.replace(/-/g, '');
+  const next  = new Date(t.deadline + 'T00:00:00Z');
+  next.setUTCDate(next.getUTCDate() + 1); // evento de dia inteiro: fim exclusivo
+  const end = next.toISOString().slice(0, 10).replace(/-/g, '');
+  const details = [t.description, 'Atrium, Painel Pessoal'].filter(Boolean).join('\n\n');
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+    + '&text=' + encodeURIComponent(t.title)
+    + '&dates=' + start + '/' + end
+    + '&details=' + encodeURIComponent(details);
+}
+
+async function setPersonalTaskStatus(taskId, status) {
+  const task = S.personalTasks.find(t => t.id === taskId);
+  if (!task) return;
+  const prev = { status: task.status, done: task.done };
+  task.status = status; task.done = status === 'done'; // optimistic
+  renderPersonal();
+  updatePersonalNavCount();
+  const { error } = await db.from('personal_tasks')
+    .update({ status, done: status === 'done', updated_at: new Date().toISOString() })
+    .eq('id', taskId)
+    .eq('user_id', S.me.id);
+  if (error) {
+    Object.assign(task, prev);
+    renderPersonal();
+    updatePersonalNavCount();
+    showNotif('❌ Erro ao mover tarefa: ' + error.message);
+  }
+}
+
+function _renderPtKanban(tasks) {
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const html = `<div class="pt-kanban">${PT_STATUSES.map(s => {
+    const col = tasks.filter(t => _ptStatus(t) === s.id);
+    return `
+      <div class="pt-kcol">
+        <div class="personal-group-header">
+          <div class="personal-group-indicator" style="background:${s.color}"></div>
+          <div class="personal-group-title">${s.label}</div>
+          <div class="personal-group-count">${col.length}</div>
+        </div>
+        <div class="pt-kcol-body personal-task-list" data-status="${s.id}">
+          ${col.map(t => renderPersonalTaskHtml(t)).join('')}
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+  document.getElementById('personal-tasks-content').innerHTML = html;
+  document.querySelectorAll('.pt-kcol-body').forEach(el => {
+    new Sortable(el, {
+      group: 'pt-kanban',
+      animation: reduced ? 0 : 200,
+      ghostClass: 'sortable-ghost',
+      dragClass: 'sortable-drag',
+      filter: '.pt-actions, .pt-check-label, .pt-gcal, .pt-buy-btn',
+      preventOnFilter: false,
+      delay: window.innerWidth <= 768 ? 150 : 0,
+      delayOnTouchOnly: true,
+      onEnd: evt => {
+        if (evt.to === evt.from) return;
+        setPersonalTaskStatus(evt.item.dataset.ptId, evt.to.dataset.status);
+      },
+    });
+  });
+}
+
 function openPersonalTaskModal(taskId) {
   _editingPersonalTaskId = taskId;
   const task = taskId ? S.personalTasks.find(t => t.id === taskId) : null;
@@ -2587,6 +3033,10 @@ function openPersonalTaskModal(taskId) {
   if (ptDesc)     ptDesc.value     = task?.description || '';
   if (ptPri)      ptPri.value      = task?.priority    || 'media';
   if (ptDeadline) ptDeadline.value = task?.deadline    || '';
+  const ptArea   = document.getElementById('pt-area');
+  const ptAmount = document.getElementById('pt-amount');
+  if (ptArea)   ptArea.value   = task?.area || (_ptArea !== 'todas' ? _ptArea : 'pessoal');
+  if (ptAmount) ptAmount.value = task?.amount ?? '';
   document.getElementById('personal-task-overlay')?.classList.add('open');
   setTimeout(() => ptTitle?.focus(), 120);
 }
@@ -2649,7 +3099,7 @@ function clearAllPtFilters() {
 }
 
 function _getFilteredPersonalTasks() {
-  let tasks = S.personalTasks;
+  let tasks = _ptAreaTasks();
   if (_ptFilter.status === 'pending') tasks = tasks.filter(t => !t.done);
   if (_ptFilter.status === 'done')    tasks = tasks.filter(t =>  t.done);
   if (_ptFilter.priority) tasks = tasks.filter(t => t.priority === _ptFilter.priority);
@@ -2676,7 +3126,7 @@ function renderPtAlerts() {
   const soon3   = new Date(); soon3.setDate(soon3.getDate() + 3);
   const soonStr = soon3.toISOString().slice(0, 10);
 
-  const alerts = S.personalTasks.filter(t =>
+  const alerts = _ptAreaTasks().filter(t =>
     !t.done && t.deadline && t.deadline <= soonStr
   ).sort((a, b) => a.deadline.localeCompare(b.deadline));
 
@@ -2725,7 +3175,11 @@ async function savePersonalTask() {
   const description = document.getElementById('pt-desc')?.value?.trim() || '';
   const priority    = document.getElementById('pt-priority')?.value || 'media';
   const deadline    = document.getElementById('pt-deadline')?.value || null;
+  const area        = document.getElementById('pt-area')?.value || 'pessoal';
+  const amountRaw   = document.getElementById('pt-amount')?.value;
+  const amount      = amountRaw === '' || amountRaw == null ? null : Math.round(parseFloat(amountRaw) * 100) / 100;
   if (!title) { showNotif('⚠️ Informe o título da tarefa.'); return; }
+  if (amount != null && (isNaN(amount) || amount < 0)) { showNotif('⚠️ Valor inválido.'); return; }
   if (!S.personalTableReady) {
     showNotif('⚠️ Execute o SQL de migração no Supabase primeiro (veja o painel pessoal).');
     closeModal('personal-task-overlay');
@@ -2737,12 +3191,12 @@ async function savePersonalTask() {
   let error;
   if (_editingPersonalTaskId) {
     ({ error } = await db.from('personal_tasks')
-      .update({ title, description, priority, deadline, updated_at: new Date().toISOString() })
+      .update({ title, description, priority, deadline, area, amount, updated_at: new Date().toISOString() })
       .eq('id', _editingPersonalTaskId)
       .eq('user_id', S.me.id));
   } else {
     ({ error } = await db.from('personal_tasks')
-      .insert({ title, description, priority, deadline, done: false, user_id: S.me.id }));
+      .insert({ title, description, priority, deadline, area, amount, status: 'todo', done: false, user_id: S.me.id }));
   }
   setBtnLoading('save-pt-btn', false);
   if (error) {
@@ -2767,20 +3221,7 @@ async function savePersonalTask() {
 async function togglePersonalTask(taskId) {
   const task = S.personalTasks.find(t => t.id === taskId);
   if (!task) return;
-  const newDone = !task.done;
-  task.done = newDone; // optimistic
-  renderPersonal();
-  updatePersonalNavCount();
-  const { error } = await db.from('personal_tasks')
-    .update({ done: newDone, updated_at: new Date().toISOString() })
-    .eq('id', taskId)
-    .eq('user_id', S.me.id);
-  if (error) {
-    task.done = !newDone; // revert
-    renderPersonal();
-    updatePersonalNavCount();
-    showNotif('❌ Erro ao atualizar tarefa.');
-  }
+  return setPersonalTaskStatus(taskId, task.done ? 'todo' : 'done');
 }
 
 async function deletePersonalTask(taskId) {
@@ -2821,6 +3262,13 @@ function renderPersonalTaskHtml(t) {
   } else if (t.deadline && t.done) {
     deadlineBadge = `<div class="pt-deadline done">${calIcon} ${fmtDate(t.deadline)}</div>`;
   }
+  const area     = t.area || 'pessoal';
+  const areaTag  = _ptArea === 'todas' ? `<span class="pt-tag">${esc(PT_AREAS.find(a => a.id === area)?.label || area)}</span>` : '';
+  const amountTag = t.amount != null ? `<span class="pt-tag pt-amount">${formatCurrency(Number(t.amount))}</span>` : '';
+  const gcal     = t.deadline ? `<a class="pt-gcal" href="${esc(_ptGcalUrl(t))}" target="_blank" rel="noopener">${calIcon} Adicionar ao Google Agenda</a>` : '';
+  const buyBtn   = area === 'compras'
+    ? `<button class="pt-buy-btn${t.done ? ' bought' : ''}" onclick="togglePersonalTask('${esc(t.id)}')">${t.done ? 'Desfazer' : 'Marcar comprado'}</button>`
+    : '';
 
   return `
   <div class="personal-task-item${t.done ? ' pt-done' : ''}${overdue ? ' pt-overdue' : ''}" data-pt-id="${esc(t.id)}">
@@ -2831,7 +3279,8 @@ function renderPersonalTaskHtml(t) {
     <div class="pt-content">
       <div class="pt-title">${esc(t.title)}</div>
       ${t.description ? `<div class="pt-desc">${esc(t.description)}</div>` : ''}
-      ${deadlineBadge}
+      ${areaTag || amountTag ? `<div class="pt-tags">${areaTag}${amountTag}</div>` : ''}
+      ${deadlineBadge || gcal || buyBtn ? `<div class="pt-meta-row">${deadlineBadge}${gcal}${buyBtn}</div>` : ''}
     </div>
     <div class="pt-actions">
       <button class="btn btn-icon pt-action-btn" onclick="openPersonalTaskModal('${esc(t.id)}')" title="Editar">${editIcon}</button>
@@ -2876,13 +3325,14 @@ async function retryPersonalSetup() {
 }
 
 function renderPersonal() {
-  const allTasks = S.personalTasks;
+  const allTasks = _ptAreaTasks();
   const total    = allTasks.length;
   const done     = allTasks.filter(t => t.done).length;
   const pending  = total - done;
   const pct      = total ? Math.round(done / total * 100) : 0;
 
-  /* ── Alert carousel ── */
+  /* ── Áreas + alert carousel ── */
+  _renderPtAreaTabs();
   renderPtAlerts();
   _syncPtFilterUI();
 
@@ -2928,7 +3378,22 @@ function renderPersonal() {
       </div>`;
     }).join('');
 
-    analyticsEl.innerHTML = `
+    const sumAmt = list => list.reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    const shopSummary = _ptArea === 'compras' ? `
+      <div class="personal-kpi-grid pt-shop-summary">
+        <div class="analytics-card personal-kpi">
+          <div class="personal-kpi-label">FALTA COMPRAR</div>
+          <div class="personal-kpi-val pt-money" id="pt-total-pending" style="color:var(--warning)">${formatCurrency(sumAmt(allTasks.filter(t => !t.done)))}</div>
+          <div class="personal-kpi-sub">${pending} itens pendentes</div>
+        </div>
+        <div class="analytics-card personal-kpi">
+          <div class="personal-kpi-label">JÁ COMPRADO</div>
+          <div class="personal-kpi-val pt-money" id="pt-total-bought" style="color:var(--success)">${formatCurrency(sumAmt(allTasks.filter(t => t.done)))}</div>
+          <div class="personal-kpi-sub">${done} itens comprados</div>
+        </div>
+      </div>` : '';
+
+    analyticsEl.innerHTML = shopSummary + `
       <div class="personal-kpi-grid">
         <div class="analytics-card personal-kpi">
           <div class="personal-kpi-label">TOTAL</div>
@@ -2973,6 +3438,9 @@ function renderPersonalTasks() {
   if (!tasksEl) return;
   const allTasks = S.personalTasks;
   const filtered = _getFilteredPersonalTasks();
+
+  // Quadro kanban mostra as colunas mesmo vazias, para dar onde arrastar.
+  if (_ptView === 'kanban' && allTasks.length > 0) { _renderPtKanban(filtered); return; }
 
   if (allTasks.length === 0) {
     tasksEl.innerHTML = `
@@ -3086,6 +3554,94 @@ function renderAnalytics() {
        </div>
      </div>`;
 
+  // Cálculos adicionais para o painel de métricas gerenciais
+  const isManager = S.me?.role === 'admin' || S.me?.role === 'gerente';
+  let monthlyCostTotal = 0;
+  S_costs.forEach(c => {
+    const costNum = parseFloat(c.cost) || 0;
+    if (c.billing_cycle === 'mensal') {
+      monthlyCostTotal += costNum;
+    } else {
+      monthlyCostTotal += costNum / 12;
+    }
+  });
+
+  const depts = ['gerencia', 'juridico', 'marketing', 'comercial'];
+  const deptLabels = { gerencia: 'Gerência', juridico: 'Jurídico', marketing: 'Marketing', comercial: 'Comercial' };
+  const deptColors = { gerencia: '#FFD60A', juridico: '#FF453A', marketing: '#B86BFF', comercial: '#34C759' };
+  const totalActive = scope.filter(c => c.status !== 'done').length;
+  const deptCards = depts.map(d => {
+    const active = scope.filter(c => c.department === d && c.status !== 'done').length;
+    const done = scope.filter(c => c.department === d && c.status === 'done').length;
+    return { id: d, label: deptLabels[d], active, done, color: deptColors[d] };
+  });
+
+  let managerHtml = '';
+  if (isManager) {
+    managerHtml = `
+    <!-- SECTOR DISTRIBUTION -->
+    <div class="analytics-card">
+      <div style="font-size:16px;font-weight:700;font-family:var(--font-display);margin-bottom:18px">Distribuição por Setor</div>
+      ${deptCards.map(d => {
+        const pctD = totalActive ? Math.round(d.active / totalActive * 100) : 0;
+        return `<div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+            <span style="font-weight:600">${d.label}</span>
+            <span style="color:${d.color};font-weight:700">${d.active} ativas <span style="color:var(--label3);font-weight:400">(${pctD}%)</span></span>
+          </div>
+          <div class="progress-track" style="height:6px">
+            <div style="height:100%;width:${pctD}%;background:${d.color};border-radius:99px;transition:width 0.8s ease"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- FINANCE VS DELIVERIES -->
+    <div class="analytics-card">
+      <div style="font-size:16px;font-weight:700;font-family:var(--font-display);margin-bottom:12px">Custo Operacional vs Entregas</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;background:var(--fill);padding:14px;border-radius:8px;border:1px solid var(--separator)">
+        <div>
+          <div style="font-size:11px;color:var(--label3);text-transform:uppercase;font-weight:700">Custo Operacional Mensal</div>
+          <div style="font-size:24px;font-weight:800;color:var(--accent);margin-top:4px">${formatCurrency(monthlyCostTotal)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--label3);text-transform:uppercase;font-weight:700">Volume de Entregas (Mês)</div>
+          <div style="font-size:24px;font-weight:800;color:var(--success);margin-top:4px">${done} concluídas</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--label3);margin-top:12px;text-align:center">
+        Custo médio por entrega concluída: <strong style="color:var(--label)">${done > 0 ? formatCurrency(monthlyCostTotal / done) : 'N/A'}</strong>
+      </div>
+    </div>
+
+    <!-- BOTTLENECKS / OUTLIERS -->
+    <div class="analytics-card" style="margin-bottom:24px">
+      <div style="font-size:16px;font-weight:700;font-family:var(--font-display);margin-bottom:14px">Gargalos e Atrasos</div>
+      ${(() => {
+        const todayStrVal = todayStr();
+        const bottleneckMems = S.profiles.map(p => {
+          const late = scope.filter(c => c.assignee_id === p.id && c.deadline && c.deadline < todayStrVal && c.status !== 'done').length;
+          const totalActive = scope.filter(c => c.assignee_id === p.id && c.status !== 'done').length;
+          return { ...p, late, totalActive };
+        }).filter(m => m.late > 0).sort((a, b) => b.late - a.late);
+
+        if (bottleneckMems.length === 0) {
+          return `<div style="text-align:center;color:var(--success);padding:16px 0;font-size:13px;">🎉 Nenhuma demanda atrasada com membros da equipe!</div>`;
+        }
+
+        return bottleneckMems.map(m => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--separator)">
+            <span style="font-size:13px;font-weight:600">${esc(m.name)}</span>
+            <div style="font-size:12px;color:var(--danger);font-weight:700">
+              ${m.late} demanda${m.late > 1 ? 's' : ''} atrasada${m.late > 1 ? 's' : ''} (${m.totalActive} ativa${m.totalActive > 1 ? 's' : ''})
+            </div>
+          </div>
+        `).join('');
+      })()}
+    </div>
+    `;
+  }
+
   document.getElementById('analytics-content').innerHTML = `
     <!-- FILTERS -->
     <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap">
@@ -3176,7 +3732,9 @@ function renderAnalytics() {
             </div>
           </div>`;
         }).join('')}
-    </div>`;
+    </div>
+    ${managerHtml}
+  `;
 }
 
 
@@ -3256,6 +3814,275 @@ document.addEventListener('visibilitychange', () => {
     window.__resumeParticles();
   }
 });
+
+/* ═══════════════════════════════════════════════════════
+   EXPANSÃO SECTORS & PERMISSIONS LOGIC
+   ═══════════════════════════════════════════════════════ */
+
+function hasDeptAccess(dept) {
+  if (!S.me) return false;
+  if (S.me.role === 'admin' || S.me.role === 'gerente') return true;
+  const allowed = S.me.allowed_departments;
+  if (Array.isArray(allowed)) {
+    return allowed.includes(dept);
+  }
+  if (typeof allowed === 'string') {
+    return allowed.replace(/{|}/g, '').split(',').filter(Boolean).includes(dept);
+  }
+  return false;
+}
+
+function renderDepartmentTabs() {
+  const container = document.getElementById('dept-tabs');
+  if (!container) return;
+  
+  const depts = [
+    { id: 'gerencia', label: 'Gerência' },
+    { id: 'juridico', label: 'Jurídico' },
+    { id: 'marketing', label: 'Marketing' },
+    { id: 'comercial', label: 'Comercial' }
+  ];
+  
+  container.innerHTML = depts.map(d => {
+    const hasAccess = hasDeptAccess(d.id);
+    const active = S.currentDepartment === d.id ? 'active' : '';
+    const lock = hasAccess ? '' : ' 🔒';
+    return `<div class="dept-tab ${active}" data-dept="${d.id}" onclick="switchDepartment('${d.id}')">${d.label}${lock}</div>`;
+  }).join('');
+}
+
+function switchDepartment(dept) {
+  S.currentDepartment = dept;
+  renderDepartmentTabs();
+  
+  const hasAccess = hasDeptAccess(dept);
+  
+  const boardEl = document.getElementById('board');
+  const lockedEl = document.getElementById('view-locked');
+  
+  if (hasAccess) {
+    if (boardEl) boardEl.style.display = 'flex';
+    if (lockedEl) lockedEl.classList.add('hidden');
+  } else {
+    if (boardEl) boardEl.style.display = 'none';
+    if (lockedEl) {
+      lockedEl.classList.remove('hidden');
+      const deptLabels = { gerencia: 'Gerência', juridico: 'Jurídico', marketing: 'Marketing', comercial: 'Comercial' };
+      document.getElementById('locked-dept-name').textContent = deptLabels[dept] || dept;
+    }
+  }
+  
+  renderBoard();
+  renderStats();
+}
+
+// Tutorial de primeiro acesso
+let currentTutorialSlide = 1;
+function showTutorialSlide(n) {
+  currentTutorialSlide = n;
+  document.querySelectorAll('.tutorial-slide').forEach(slide => {
+    slide.classList.toggle('hidden', parseInt(slide.dataset.slide) !== n);
+  });
+  document.querySelectorAll('.t-dot').forEach(dot => {
+    dot.classList.toggle('active', parseInt(dot.dataset.slide) === n);
+  });
+  document.getElementById('tutorial-prev-btn').style.visibility = n === 1 ? 'hidden' : 'visible';
+  document.getElementById('tutorial-next-btn').textContent = n === 3 ? 'Começar a Usar' : 'Próximo';
+}
+function nextTutorialSlide() {
+  if (currentTutorialSlide < 3) {
+    showTutorialSlide(currentTutorialSlide + 1);
+  } else {
+    localStorage.setItem('atrium_tutorial_seen', 'true');
+    document.getElementById('tutorial-overlay').style.display = 'none';
+  }
+}
+function prevTutorialSlide() {
+  if (currentTutorialSlide > 1) {
+    showTutorialSlide(currentTutorialSlide - 1);
+  }
+}
+
+// Editar permissões de equipe
+let editingMemberId = null;
+function openEditMemberModal(userId) {
+  const p = S.profiles.find(x => x.id === userId);
+  if (!p) return;
+  editingMemberId = userId;
+  document.getElementById('em-name').value = p.name || 'Membro';
+  document.getElementById('em-role').value = p.role || 'corretor';
+  
+  const allowed = p.allowed_departments || [];
+  const depts = Array.isArray(allowed) ? allowed : (typeof allowed === 'string' ? allowed.replace(/{|}/g, '').split(',').filter(Boolean) : []);
+  
+  document.getElementById('em-dept-gerencia').checked = depts.includes('gerencia');
+  document.getElementById('em-dept-juridico').checked = depts.includes('juridico');
+  document.getElementById('em-dept-marketing').checked = depts.includes('marketing');
+  document.getElementById('em-dept-comercial').checked = depts.includes('comercial');
+  
+  openModal('edit-member-overlay');
+}
+
+async function saveEditedMember() {
+  if (!editingMemberId) return;
+  const role = document.getElementById('em-role').value;
+  const allowed_departments = [];
+  if (document.getElementById('em-dept-gerencia').checked) allowed_departments.push('gerencia');
+  if (document.getElementById('em-dept-juridico').checked) allowed_departments.push('juridico');
+  if (document.getElementById('em-dept-marketing').checked) allowed_departments.push('marketing');
+  if (document.getElementById('em-dept-comercial').checked) allowed_departments.push('comercial');
+  
+  setBtnLoading('save-edit-member-btn', true);
+  try {
+    const { error } = await db.from('profiles').update({
+      role,
+      allowed_departments
+    }).eq('id', editingMemberId);
+    
+    if (error) throw error;
+    
+    showNotif('✅ Membro atualizado com sucesso!');
+    closeModal('edit-member-overlay');
+    
+    // Atualiza estado local
+    const p = S.profiles.find(x => x.id === editingMemberId);
+    if (p) {
+      p.role = role;
+      p.allowed_departments = allowed_departments;
+    }
+    if (S.me?.id === editingMemberId) {
+      S.me.role = role;
+      S.me.allowed_departments = allowed_departments;
+      renderSidebar();
+    }
+    
+    renderTeam();
+  } catch (err) {
+    showNotif('❌ Erro ao atualizar: ' + err.message);
+  } finally {
+    setBtnLoading('save-edit-member-btn', false);
+  }
+}
+
+// CRUD Custos
+let S_costs = [];
+let editingCostId = null;
+
+async function loadCosts() {
+  if (S.me?.role !== 'admin' && S.me?.role !== 'gerente') return;
+  try {
+    const { data, error } = await db.from('operational_costs').select('*').order('name');
+    if (error) throw error;
+    S_costs = data || [];
+    renderCosts();
+  } catch (err) {
+    console.error('Error loading costs:', err.message);
+  }
+}
+
+function renderCosts() {
+  let totalMonthly = 0;
+  let totalYearly = 0;
+  
+  const body = document.getElementById('costs-list-body');
+  if (!body) return;
+  
+  if (S_costs.length === 0) {
+    body.innerHTML = `<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--label3);font-size:13px;">Nenhum custo cadastrado.</td></tr>`;
+    document.getElementById('total-monthly-cost').textContent = 'R$ 0,00';
+    document.getElementById('total-yearly-cost').textContent = 'R$ 0,00';
+    return;
+  }
+  
+  body.innerHTML = S_costs.map(c => {
+    const costNum = parseFloat(c.cost) || 0;
+    if (c.billing_cycle === 'mensal') {
+      totalMonthly += costNum;
+      totalYearly += costNum * 12;
+    } else {
+      totalMonthly += costNum / 12;
+      totalYearly += costNum;
+    }
+    
+    return `<tr style="border-bottom:1px solid var(--separator);">
+      <td style="padding:14px 16px;font-weight:600;color:var(--label);">${esc(c.name)}</td>
+      <td style="padding:14px 16px;color:var(--label);">${formatCurrency(costNum)}</td>
+      <td style="padding:14px 16px;"><span class="badge" style="background:var(--fill);color:var(--label2);font-size:11px;padding:3px 8px;border-radius:6px;text-transform:capitalize;">${c.billing_cycle}</span></td>
+      <td style="padding:14px 16px;text-align:right;">
+        <button class="btn btn-secondary btn-xs" onclick="openCostModal('${c.id}')">Editar</button>
+        <button class="btn btn-danger-soft btn-xs" style="margin-left:6px;" onclick="deleteCost('${c.id}')">Excluir</button>
+      </td>
+    </tr>`;
+  }).join('');
+  
+  document.getElementById('total-monthly-cost').textContent = formatCurrency(totalMonthly);
+  document.getElementById('total-yearly-cost').textContent = formatCurrency(totalYearly);
+}
+
+function formatCurrency(v) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+}
+
+function openCostModal(id) {
+  editingCostId = id;
+  if (id) {
+    const c = S_costs.find(x => x.id === id);
+    if (!c) return;
+    document.getElementById('cost-modal-title').textContent = 'Editar Assinatura';
+    document.getElementById('c-name').value = c.name;
+    document.getElementById('c-cost').value = c.cost;
+    document.getElementById('c-cycle').value = c.billing_cycle;
+  } else {
+    document.getElementById('cost-modal-title').textContent = 'Nova Assinatura';
+    document.getElementById('c-name').value = '';
+    document.getElementById('c-cost').value = '';
+    document.getElementById('c-cycle').value = 'mensal';
+  }
+  openModal('cost-overlay');
+}
+
+async function saveCost() {
+  const name = document.getElementById('c-name').value.trim();
+  const costVal = parseFloat(document.getElementById('c-cost').value);
+  const cycle = document.getElementById('c-cycle').value;
+  
+  if (!name || isNaN(costVal) || costVal < 0) {
+    showNotif('⚠️ Nome e valor válido são obrigatórios.');
+    return;
+  }
+  
+  setBtnLoading('save-cost-btn', true);
+  try {
+    const payload = { name, cost: costVal, billing_cycle: cycle };
+    if (editingCostId) {
+      const { error } = await db.from('operational_costs').update(payload).eq('id', editingCostId);
+      if (error) throw error;
+      showNotif('✅ Assinatura atualizada!');
+    } else {
+      const { error } = await db.from('operational_costs').insert(payload);
+      if (error) throw error;
+      showNotif('✅ Assinatura cadastrada!');
+    }
+    closeModal('cost-overlay');
+    await loadCosts();
+  } catch (err) {
+    showNotif('❌ Erro: ' + err.message);
+  } finally {
+    setBtnLoading('save-cost-btn', false);
+  }
+}
+
+async function deleteCost(id) {
+  if (!confirm('Deseja excluir esta assinatura permanentemente?')) return;
+  try {
+    const { error } = await db.from('operational_costs').delete().eq('id', id);
+    if (error) throw error;
+    showNotif('✅ Assinatura excluída!');
+    await loadCosts();
+  } catch (err) {
+    showNotif('❌ Erro: ' + err.message);
+  }
+}
 
 // Kick off
 init();

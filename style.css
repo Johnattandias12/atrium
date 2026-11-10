@@ -1622,8 +1622,242 @@ input[type="date"] { color-scheme: dark; }
   .personal-migration-card { padding:16px; }
 }
 
+/* ─── Painel Pessoal: áreas, quadro kanban, compras e Google Agenda ─── */
+.pt-areabar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+.pt-area-tabs { display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; min-width:0; padding-bottom:2px; }
+.pt-area-tabs::-webkit-scrollbar { display:none; }
+.pt-area-tabs .pt-chip { white-space:nowrap; flex-shrink:0; display:inline-flex; align-items:center; gap:6px; }
+.pt-area-count { font-size:10px; font-weight:800; background:var(--fill2); color:var(--label2); padding:1px 7px; border-radius:99px; }
+.pt-chip.active .pt-area-count { background:var(--accent); color:#fff; }
+.pt-view-toggle { display:flex; gap:2px; padding:3px; border-radius:99px; border:1px solid var(--separator); background:var(--surface); flex-shrink:0; }
+.pt-view-toggle .pt-tab { min-height:32px; padding:5px 12px; }
+.pt-shop-summary { grid-template-columns:repeat(2,1fr); }
+.pt-kanban { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; align-items:start; }
+.pt-kcol { background:var(--fill); border:1px solid var(--separator); border-radius:var(--radius); padding:12px 10px; min-width:0; }
+.pt-kcol .personal-group-header { margin-bottom:10px; }
+.pt-kcol-body { min-height:72px; }
+.pt-kcol .personal-task-item { cursor:grab; }
+.pt-kcol .personal-task-item .pt-actions { opacity:1; flex-direction:column; }
+.pt-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.pt-tag { font-size:11px; font-weight:600; color:var(--label2); background:var(--fill2); padding:2px 8px; border-radius:99px; }
+.pt-tag.pt-amount { color:var(--accent); background:var(--accent-bg); font-variant-numeric:tabular-nums; }
+.pt-meta-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:6px; }
+.pt-meta-row .pt-deadline { margin-top:0; }
+.pt-gcal { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:var(--accent); text-decoration:none; padding:3px 8px; border-radius:99px; border:1px solid var(--accent-bg); }
+.pt-gcal:hover { background:var(--accent-bg); }
+.pt-buy-btn { font-family:var(--font); font-size:12px; font-weight:700; padding:5px 12px; min-height:30px; border-radius:99px; border:1px solid var(--success); background:transparent; color:var(--success); cursor:pointer; white-space:nowrap; }
+.pt-buy-btn:hover { background:var(--success-dim, rgba(48,209,88,0.12)); }
+.pt-buy-btn.bought { border-color:var(--separator); color:var(--label3); }
+.pt-money { font-size:28px; letter-spacing:-1px; font-variant-numeric:tabular-nums; }
+
+@media (max-width:768px) {
+  .pt-areabar { flex-direction:column; align-items:stretch; }
+  .pt-view-toggle { align-self:flex-start; }
+  .pt-view-toggle .pt-tab { min-height:38px; }
+  .pt-kanban { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; gap:10px; margin:0 -14px; padding:0 14px 6px; }
+  .pt-kcol { flex:0 0 86%; scroll-snap-align:start; }
+  .pt-gcal, .pt-buy-btn { min-height:36px; font-size:12px; }
+  .pt-money { font-size:22px; }
+}
+
 
 /* ═══ REDUCED MOTION ═══ */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration:0.01ms !important; transition-duration:0.01ms !important; }
+  *, *::before, *::after { animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; }
+}
+
+
+/* ══════════════════════════════════════════
+   EXPANSÃO SECTORS & PERMISSIONS
+   ══════════════════════════════════════════ */
+
+/* Seletor de Departamentos no Topbar */
+.dept-tabs-container {
+  display: flex;
+  align-items: center;
+}
+.dept-tabs {
+  display: flex;
+  background: var(--fill);
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--separator);
+  gap: 2px;
+}
+:root[data-theme="light"] .dept-tabs {
+  background: #f0f2f7;
+  border-color: rgba(0,0,0,0.06);
+}
+.dept-tab {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--label3);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+.dept-tab:hover {
+  color: var(--label);
+}
+.dept-tab.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+:root[data-theme="light"] .dept-tab.active {
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+/* Tela de Bloqueio (Locked View) */
+.locked-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+.locked-card {
+  max-width: 460px;
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius);
+  padding: 40px 30px;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+:root[data-theme="light"] .locked-card {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0,0,0,0.06);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.06);
+}
+.locked-icon {
+  font-size: 48px;
+  margin-bottom: 20px;
+  animation: lockBounce 2s infinite ease-in-out;
+}
+@keyframes lockBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.locked-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--label);
+}
+.locked-desc {
+  font-size: 14px;
+  color: var(--label2);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.locked-action {
+  font-size: 13px;
+  color: var(--label3);
+  line-height: 1.4;
+  border-top: 1px solid var(--separator);
+  padding-top: 16px;
+}
+
+/* Custos/Assinaturas Table */
+.costs-table th, .costs-table td {
+  padding: 14px 16px;
+  font-size: 13px;
+}
+.costs-table tr {
+  transition: background 0.12s;
+}
+.costs-table tbody tr:hover {
+  background: var(--fill);
+}
+:root[data-theme="light"] .costs-table tbody tr:hover {
+  background: #f7f9fe;
+}
+:root[data-theme="light"] .costs-table th {
+  background: #f7f9fe;
+  color: var(--label2);
+}
+
+/* Tutorial Modal */
+.tutorial-box {
+  background: var(--surface);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+:root[data-theme="light"] .tutorial-box {
+  background: #fff;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+  border-color: rgba(0,0,0,0.08);
+}
+.tutorial-indicators {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 24px 0 16px;
+}
+.t-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--separator);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.t-dot.active {
+  background: var(--accent);
+  width: 20px;
+  border-radius: 4px;
+}
+
+/* Novas Cores de Cargos */
+.r-marketing { background: rgba(162, 59, 255, 0.14); color: #B86BFF; }
+.r-comercial { background: rgba(52, 199, 89, 0.14); color: #34C759; }
+.r-juridico  { background: rgba(255, 69, 58, 0.14); color: #FF453A; }
+:root[data-theme="light"] .r-marketing { background: rgba(162, 59, 255, 0.08); color: #8F00FF; }
+:root[data-theme="light"] .r-comercial { background: rgba(52, 199, 89, 0.08); color: #248A3D; }
+:root[data-theme="light"] .r-juridico  { background: rgba(255, 69, 58, 0.08); color: #D7261E; }
+
+/* Mobile Adaptations for Sector Switcher */
+@media (max-width: 768px) {
+  .dept-tabs-container {
+    width: 100%;
+    margin-left: 0 !important;
+    margin-top: 8px;
+    justify-content: center;
+  }
+  .dept-tabs {
+    width: 100%;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  .dept-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .dept-tab {
+    flex: 1;
+    text-align: center;
+  }
+  .topbar {
+    flex-direction: column;
+    height: auto;
+    padding: 12px;
+    align-items: stretch;
+  }
+  .topbar-title {
+    font-size: 20px;
+    text-align: center;
+  }
+  .topbar-spacer {
+    display: none;
+  }
 }
