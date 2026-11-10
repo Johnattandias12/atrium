@@ -36,3 +36,8 @@ begin
     end if;
   end loop;
 end $$;
+
+-- Aba Pessoal dentro do Quadro de Demandas usa as mesmas quatro colunas dos setores: entra 'review'.
+alter table public.personal_tasks drop constraint if exists personal_tasks_status_check;
+alter table public.personal_tasks add constraint personal_tasks_status_check
+  check (status in ('todo','doing','review','done'));

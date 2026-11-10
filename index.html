@@ -462,14 +462,6 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
         <span class="nav-label">Assinaturas</span>
       </div>
     </div>
-    <div class="sidebar-section" style="margin-top:4px">
-      <div class="sidebar-section-label">Pessoal</div>
-      <div class="nav-item" id="nav-personal" onclick="switchView('personal', this)">
-        <span class="nav-icon-wrap"><svg><use href="#ic-personal"/></svg></span>
-        <span class="nav-label">Painel</span>
-        <span class="nav-count" id="nav-count-personal" style="display:none">0</span>
-      </div>
-    </div>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-profile" onclick="switchView('settings', document.getElementById('nav-settings'))" title="Meu Perfil">
       <div id="sb-avatar-container"></div>
@@ -509,6 +501,14 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
         </div>
         <select class="filter-select" id="filter-user" onchange="onFilterChange()">
           <option value="">Todos</option>
+        </select>
+        <select class="filter-select" id="filter-area" onchange="onFilterChange()" style="display:none">
+          <option value="">Todas as áreas</option>
+          <option value="ufrn">UFRN</option>
+          <option value="trabalho">Trabalho</option>
+          <option value="pessoal">Pessoal</option>
+          <option value="saude">Saúde e Treino</option>
+          <option value="compras">Compras</option>
         </select>
         <select class="filter-select" id="filter-urgency" onchange="onFilterChange()">
           <option value="">Urgência</option>
@@ -749,7 +749,7 @@ create policy "avatars_auth_delete"  on storage.objects for delete  using (bucke
 
       <!-- Header -->
       <div class="personal-header">
-        <h2 class="personal-title">Meu Painel <span class="personal-title-badge">🔒 Privado</span></h2>
+        <h2 class="personal-title">Meu Quadro <span class="personal-title-badge">🔒 Privado</span></h2>
         <button class="btn btn-primary pt-btn-add" onclick="openPersonalTaskModal(null)">
           <svg width="14" height="14" style="flex-shrink:0"><use href="#ic-plus"/></svg>Nova tarefa
         </button>
@@ -1199,7 +1199,7 @@ function toggleAdvanced() {
 ═══════════════════════════════════════════════════════ */
 function renderOverdueBanner() {
   const today = todayStr();
-  const overdue = S.cards.filter(c => c.deadline && c.deadline < today && c.status !== 'done');
+  const overdue = boardCards().filter(c => c.deadline && c.deadline < today && c.status !== 'done');
   const banner = document.getElementById('overdue-banner');
   const text   = document.getElementById('overdue-banner-text');
   if (!banner || !text) return;
@@ -1218,8 +1218,8 @@ function renderBoardProgress() {
   const fill  = document.getElementById('board-progress-fill');
   const label = document.getElementById('board-progress-label');
   if (!bar || !fill || !label) return;
-  const total = S.cards.length;
-  const done  = S.cards.filter(c => c.status === 'done').length;
+  const total = boardCards().length;
+  const done  = boardCards().filter(c => c.status === 'done').length;
   if (total === 0) { bar.classList.add('hidden'); return; }
   const pct = Math.round(done / total * 100);
   bar.classList.remove('hidden');
@@ -1248,6 +1248,15 @@ let S = {
   filterDateTo: '',
   currentDepartment: 'gerencia',
 };
+
+const isPtBoard = () => S.currentDepartment === 'pessoal';
+function ptAsCard(t) {
+  return { id: t.id, title: t.title, description: t.description, urgency: t.priority || 'media', deadline: t.deadline,
+    status: t.done ? 'done' : (['doing', 'review'].includes(t.status) ? t.status : 'todo'),
+    created_at: t.created_at, department: 'pessoal', assignee_id: null, co_assignee_ids: [],
+    _pt: true, area: t.area || 'pessoal', amount: t.amount };
+}
+function boardCards() { return isPtBoard() ? S.personalTasks.map(ptAsCard) : S.cards; }
 
 const COLS = [
   { id: 'todo',   label: 'A Fazer',      color: '#FF3B30' },
@@ -1405,7 +1414,7 @@ function setupRealtime() {
       _rtDebounce('personal_tasks', async () => {
         await loadPersonalTasks();
         updatePersonalNavCount();
-        if (S.view === 'personal') renderPersonal();
+        renderPersonal();
       });
     })
     .subscribe();
@@ -1450,6 +1459,10 @@ async function bootApp() {
         }
       }
     }
+
+    const lastDept = _ptLsGet('atrium_dept', '');
+    if (lastDept && hasDeptAccess(lastDept)) S.currentDepartment = lastDept;
+    else if (S.personalTasks.some(t => !t.done)) S.currentDepartment = 'pessoal';
 
     populateFilters();
     renderSidebar();
@@ -1698,7 +1711,7 @@ function switchView(view, navEl) {
     analytics: 'Analytics', 
     team: 'Equipe', 
     settings: 'Configurações', 
-    personal: 'Meu Painel Pessoal',
+    personal: 'Meu Quadro',
     costs: 'Custos de Assinaturas'
   };
   document.getElementById('topbar-title').textContent = titles[view] || view;
@@ -1719,12 +1732,13 @@ function switchView(view, navEl) {
    STATS
 ═══════════════════════════════════════════════════════ */
 function renderStats() {
-  const total = S.cards.length;
-  const done = S.cards.filter(c => c.status === 'done').length;
-  const doing = S.cards.filter(c => c.status === 'doing').length;
-  const critica = S.cards.filter(c => c.urgency === 'critica' && c.status !== 'done').length;
+  const src = boardCards();
+  const total = src.length;
+  const done = src.filter(c => c.status === 'done').length;
+  const doing = src.filter(c => c.status === 'doing').length;
+  const critica = src.filter(c => c.urgency === 'critica' && c.status !== 'done').length;
   const today = todayStr();
-  const overdue = S.cards.filter(c => c.deadline && c.deadline < today && c.status !== 'done').length;
+  const overdue = src.filter(c => c.deadline && c.deadline < today && c.status !== 'done').length;
   const pct = total ? Math.round(done / total * 100) : 0;
 
   document.getElementById('stats-row').innerHTML = [
@@ -1845,10 +1859,12 @@ function filteredCards(colId) {
   const dt = document.getElementById('filter-date-to')?.value || '';
 
   // Sort cards by their position (if available) or fallback to created_at
-  let list = S.cards.filter(c => {
+  const pt = isPtBoard();
+  const fa = document.getElementById('filter-area')?.value || '';
+  let list = boardCards().filter(c => {
     if (c.status !== colId) return false;
     if ((c.department || 'gerencia') !== (S.currentDepartment || 'gerencia')) return false;
-    if (fu && c.assignee_id !== fu) return false;
+    if (pt ? (fa && c.area !== fa) : (fu && c.assignee_id !== fu)) return false;
     if (fg && c.urgency !== fg) return false;
     if (S.search && !c.title.toLowerCase().includes(S.search) && !(c.description||'').toLowerCase().includes(S.search)) return false;
     // Date range filter: uses deadline if set, falls back to created_at
@@ -1858,6 +1874,9 @@ function filteredCards(colId) {
     return true;
   });
   
+  // Pessoal: ordem por prazo, sem prazo no fim
+  if (pt) return list.sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'));
+
   list.sort((a,b) => {
     // localStorage (cfg.cardOrder) tem prioridade — atualizado imediatamente no drag.
     // Fallback: position do DB; último recurso: created_at (mais recente primeiro).
@@ -1917,6 +1936,8 @@ function renderBoard() {
         const empty = evt.to.querySelector('.empty-col');
         if (empty) empty.remove();
         
+        if (isPtBoard()) { if (toCol !== fromCol) setPersonalTaskStatus(cardId, toCol); return; }
+
         const card = S.cards.find(c => c.id === cardId);
         if (!card) return;
         
@@ -2053,7 +2074,7 @@ function renderCardHtml(c, index) {
         ${isDone
           ? `<div style="display:flex;align-items:center;gap:6px">
                <div class="urgency-pill u-done">✓ Feito</div>
-               <button class="btn btn-xs btn-secondary" onclick="event.stopPropagation(); reopenCard('${c.id}')" title="Voltar para Revisão" style="padding:2px 6px;font-size:9px">Reabrir</button>
+               <button class="btn btn-xs btn-secondary" onclick="event.stopPropagation(); ${c._pt ? 'setPersonalTaskStatus' : 'reopenCard'}('${c.id}'${c._pt ? ",'review'" : ''})" title="Voltar para Revisão" style="padding:2px 6px;font-size:9px">Reabrir</button>
              </div>`
           : overdue
             ? `<div class="card-overdue-badge">! Atrasado</div>`
@@ -2063,13 +2084,15 @@ function renderCardHtml(c, index) {
       ${c.description ? `<div class="card-desc">${esc(c.description)}</div>` : ''}
       <div class="card-footer">
         <div style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">
-          ${a
+          ${c._pt
+            ? `<div class="card-assignee"><span class="pt-tag">${esc(PT_AREAS.find(x => x.id === c.area)?.label || c.area)}</span>${c.amount != null ? `<span class="pt-tag pt-amount">${formatCurrency(Number(c.amount))}</span>` : ''}</div>`
+            : a
             ? `<div class="card-assignee">${renderAvatarHtml(a, 'av-sm')}<span class="truncate">${esc(a.name.split(' ')[0])}</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Remover…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}" ${p.id===a.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>`
             : `<div class="card-assignee" style="opacity:0.5">${renderAvatarHtml(null, 'av-sm')}<span class="truncate">Sem dono</span><select class="quick-assign-select" onchange="quickAssign('${esc(c.id)}', this.value)" onclick="event.stopPropagation()"><option value="">Atribuir…</option>${S.profiles.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></div>`
           }
           ${coAvatarsHtml}
         </div>
-        ${c.deadline ? `<div class="card-date ${dateClass}">${calIcon} ${fmtDate(c.deadline)}</div>` : ''}
+        ${c.deadline ? `<div class="card-date ${dateClass}">${calIcon} ${c._pt ? _ptFmtDay(c.deadline) : fmtDate(c.deadline)}</div>` : ''}
       </div>
     </div>
   </div>`;
@@ -2079,6 +2102,7 @@ function renderCardHtml(c, index) {
    CARD DRAWER — CRUD
 ═══════════════════════════════════════════════════════ */
 function openCardDrawer(cardId, defaultStatus) {
+  if (isPtBoard()) return openPersonalTaskModal(cardId || null);
   S.editingCardId = cardId || null;
   const card = cardId ? S.cards.find(c => c.id === cardId) : null;
 
@@ -2926,8 +2950,8 @@ let _ptView = _ptLsGet('atrium_pt_view', 'kanban');
 if (_ptArea !== 'todas' && !PT_AREAS.some(a => a.id === _ptArea)) _ptArea = 'todas';
 if (!['kanban', 'list'].includes(_ptView)) _ptView = 'kanban';
 
-// done é a fonte da verdade de "concluída"; status só distingue A fazer de Fazendo.
-function _ptStatus(t) { return t.done ? 'done' : (t.status === 'doing' ? 'doing' : 'todo'); }
+// done é a fonte da verdade de "concluída"; status distingue A fazer, Fazendo e Revisão.
+function _ptStatus(t) { return t.done ? 'done' : (['doing', 'review'].includes(t.status) ? 'doing' : 'todo'); }
 function _ptAreaTasks() { return _ptArea === 'todas' ? S.personalTasks : S.personalTasks.filter(t => (t.area || 'pessoal') === _ptArea); }
 
 function setPtArea(area) {
@@ -2953,6 +2977,8 @@ function _renderPtAreaTabs() {
   document.getElementById('ptv-kanban')?.classList.toggle('active', _ptView === 'kanban');
   document.getElementById('ptv-list')?.classList.toggle('active', _ptView === 'list');
 }
+
+function _ptFmtDay(d) { return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' }).replace(/\./g, ''); }
 
 function _ptGcalUrl(t) {
   const start = t.deadline.replace(/-/g, '');
@@ -2988,7 +3014,8 @@ async function setPersonalTaskStatus(taskId, status) {
 function _renderPtKanban(tasks) {
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const html = `<div class="pt-kanban">${PT_STATUSES.map(s => {
-    const col = tasks.filter(t => _ptStatus(t) === s.id);
+    const col = tasks.filter(t => _ptStatus(t) === s.id)
+      .sort((a, b) => (a.deadline || '9999').localeCompare(b.deadline || '9999'));
     return `
       <div class="pt-kcol">
         <div class="personal-group-header">
@@ -3257,7 +3284,7 @@ function renderPersonalTaskHtml(t) {
   let deadlineBadge = '';
   if (t.deadline && !t.done) {
     const cls  = overdue ? 'pt-deadline overdue' : soon ? 'pt-deadline soon' : 'pt-deadline';
-    const label = overdue ? '! Atrasado' : fmtDate(t.deadline);
+    const label = (overdue ? 'Atrasado, ' : '') + _ptFmtDay(t.deadline);
     deadlineBadge = `<div class="${cls}">${calIcon} ${label}</div>`;
   } else if (t.deadline && t.done) {
     deadlineBadge = `<div class="pt-deadline done">${calIcon} ${fmtDate(t.deadline)}</div>`;
@@ -3265,7 +3292,7 @@ function renderPersonalTaskHtml(t) {
   const area     = t.area || 'pessoal';
   const areaTag  = _ptArea === 'todas' ? `<span class="pt-tag">${esc(PT_AREAS.find(a => a.id === area)?.label || area)}</span>` : '';
   const amountTag = t.amount != null ? `<span class="pt-tag pt-amount">${formatCurrency(Number(t.amount))}</span>` : '';
-  const gcal     = t.deadline ? `<a class="pt-gcal" href="${esc(_ptGcalUrl(t))}" target="_blank" rel="noopener">${calIcon} Adicionar ao Google Agenda</a>` : '';
+  const gcal     = t.deadline ? `<a class="pt-gcal" title="Adicionar ao Google Agenda" href="${esc(_ptGcalUrl(t))}" target="_blank" rel="noopener">${calIcon} Agenda</a>` : '';
   const buyBtn   = area === 'compras'
     ? `<button class="pt-buy-btn${t.done ? ' bought' : ''}" onclick="togglePersonalTask('${esc(t.id)}')">${t.done ? 'Desfazer' : 'Marcar comprado'}</button>`
     : '';
@@ -3325,6 +3352,7 @@ async function retryPersonalSetup() {
 }
 
 function renderPersonal() {
+  if (S.view === 'board' && isPtBoard()) renderBoard();
   const allTasks = _ptAreaTasks();
   const total    = allTasks.length;
   const done     = allTasks.filter(t => t.done).length;
@@ -3335,6 +3363,8 @@ function renderPersonal() {
   _renderPtAreaTabs();
   renderPtAlerts();
   _syncPtFilterUI();
+  document.getElementById('view-personal')?.classList.toggle('pt-board-mode',
+    _ptView === 'kanban' && S.personalTableReady && S.personalTasks.length > 0);
 
   /* ── Migration card ── */
   const analyticsEl = document.getElementById('personal-analytics-section');
@@ -3821,6 +3851,7 @@ document.addEventListener('visibilitychange', () => {
 
 function hasDeptAccess(dept) {
   if (!S.me) return false;
+  if (dept === 'pessoal') return true; // quadro privado de cada usuário (personal_tasks)
   if (S.me.role === 'admin' || S.me.role === 'gerente') return true;
   const allowed = S.me.allowed_departments;
   if (Array.isArray(allowed)) {
@@ -3840,7 +3871,8 @@ function renderDepartmentTabs() {
     { id: 'gerencia', label: 'Gerência' },
     { id: 'juridico', label: 'Jurídico' },
     { id: 'marketing', label: 'Marketing' },
-    { id: 'comercial', label: 'Comercial' }
+    { id: 'comercial', label: 'Comercial' },
+    { id: 'pessoal', label: 'Pessoal' }
   ];
   
   container.innerHTML = depts.map(d => {
@@ -3853,6 +3885,10 @@ function renderDepartmentTabs() {
 
 function switchDepartment(dept) {
   S.currentDepartment = dept;
+  _ptLsSet('atrium_dept', dept);
+  const fUser = document.getElementById('filter-user'), fArea = document.getElementById('filter-area');
+  if (fUser) fUser.style.display = dept === 'pessoal' ? 'none' : '';
+  if (fArea) fArea.style.display = dept === 'pessoal' ? '' : 'none';
   renderDepartmentTabs();
   
   const hasAccess = hasDeptAccess(dept);
